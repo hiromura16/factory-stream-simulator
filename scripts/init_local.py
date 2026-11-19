@@ -1,3 +1,4 @@
+# モジュール読解: 指定場所にローカル利用用の非公開設定を準備する。既存の環境ファイルと秘密ファイルを上書きせず、値は表示しない。
 """Create private local settings without printing or overwriting credentials."""
 
 import argparse

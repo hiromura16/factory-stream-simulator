@@ -1,3 +1,4 @@
+# モジュール読解: 合成行の送信前保存、宛先固定の再送、配送方式別の完了判定をまとめる。
 """Configurable MQTT/HTTP delivery with a destination-bound persistent outbox."""
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from generation import (
 
 @contextmanager
 def outbox():
+    """送信待ち履歴のSQLiteを開き、トランザクション終了後に接続を閉じる。"""
     root = Path(os.environ.get("DATA_DIR", "./data"))
     root.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(root / "outbox.sqlite3", timeout=15)
@@ -56,6 +58,10 @@ def outbox():
 
 
 def fingerprint(profile):
+    """配送先の主要属性から照合値を作り、別宛先への誤再送を防ぐ。
+
+    秘密値そのものは照合値に含めない。
+    """
     target = {
         k: getattr(profile, k)
         for k in [
@@ -84,11 +90,15 @@ def fingerprint(profile):
 
 
 class NoRedirect(HTTPRedirectHandler):
+    """HTTP転送先へ送信を引き継がないハンドラー。"""
+    # 読解 NoRedirect.redirect_request: 転送要求を作らず、元の宛先向け本文と認証を別のURLへ渡さない。
     def redirect_request(self, *args, **kwargs):
         return None
 
 
 class Sender:
+    """配送方式別のクライアントと送信処理をまとめる。"""
+    # 読解 Sender.__init__: 方式別の接続を準備する。HTTPは転送と環境プロキシを使わず、MQTTは接続受理を待つ。
     def __init__(self, profile):
         self.profile, self.client = profile, None
         self.extra = None
@@ -145,6 +155,7 @@ class Sender:
             )
             self.client.connect_timeout = profile.timeout_seconds
 
+            # 読解 Sender.__init__.on_connect: 接続理由コードから受理の成否を記録し、同期側の待機を解除する。
             def on_connect(client, userdata, flags, reason, properties):
                 self.accepted = reason == 0
                 connected.set()
@@ -172,6 +183,7 @@ class Sender:
         elif profile.kind != "capture":
             raise GenerationError("MQTT／HTTP／ローカル記録の接続先を指定してください")
 
+    # 読解 Sender.send: アウトボックス項目を方式に従って送る。HTTPは本文形式が混在するバッチを拒否し、MQTTは送信完了を待つ。
     def send(self, entries):
         if self.extra:
             return self.extra.send(entries)
@@ -237,6 +249,7 @@ class Sender:
                     ):
                         raise RuntimeError("HTTP受信先から一部失敗が返されました")
 
+    # 読解 Sender.close: 追加トランスポートに終了を委譲するか、MQTTの接続とループを閉じる。
     def close(self):
         if self.extra:
             return self.extra.close()
@@ -245,6 +258,7 @@ class Sender:
             self.client.loop_stop()
 
 
+# 読解 test_connection: 本文を発行せず方式別に疎通を確認する。HTTPのHEAD非対応は到達として扱い、接続は最後に閉じる。
 def test_connection(profile):
     sender = Sender(profile)
     try:
@@ -276,6 +290,10 @@ def test_connection(profile):
 
 
 def enqueue(profile, entries):
+    """宛先とレコード識別子に結び付けて送信待ちを保存する。
+
+    同じ識別子で本文等が異なる場合は拒否する。既配送分は再送候補から除く。
+    """
     target = fingerprint(profile)
     with outbox() as conn:
         placeholders = ",".join("?" for _ in entries)
@@ -320,6 +338,10 @@ def enqueue(profile, entries):
 
 
 def deliver(profile, sender, entries, ctx, batch_number=1):
+    """送信を試み、成功した項目を配送済みにする。失敗時は設定範囲で再試行する。
+
+    送信先での受信と履歴更新は別操作であり、exactly-onceの保証ではない。
+    """
     target = fingerprint(profile)
     for attempt in range(profile.delivery_attempts):
         ctx.check()
@@ -363,6 +385,7 @@ def deliver(profile, sender, entries, ctx, batch_number=1):
 
 
 def handle(spec, ctx, profile, store):
+    """生成した本文を先に保存し、記録専用モード以外では配送する。"""
     overrides = {
         name: getattr(spec.stream, name)
         for name in ["delivery_attempts", "retry_backoff_ms"]
@@ -446,6 +469,7 @@ def handle(spec, ctx, profile, store):
 
 
 def summary():
+    """送信状態の件数と直近100件を返す。旧形式の未送信件数も別に示す。"""
     with outbox() as conn:
         counts = {
             r[0]: r[1]
@@ -475,6 +499,7 @@ def summary():
 
 
 def retry(spec, ctx, profile, store):
+    """現在の接続先と一致する未配送分だけを、保存順と本文形式に沿って再送する。"""
     if profile.kind == "capture":
         raise GenerationError("記録専用の接続先では再送できません")
     sender = Sender(profile)
@@ -495,6 +520,7 @@ def retry(spec, ctx, profile, store):
             if not entries:
                 break
             cursor = entries[-1]["enqueue_order"]
+            # コールバック: 連続する同じ本文形式をまとめるキーを返す。配送順序を並べ替えない。
             for mode, mode_entries in groupby(entries, key=lambda e: e["body_mode"]):
                 group = []
                 size = 0

@@ -1,3 +1,5 @@
+# モジュール読解: 宣言された規則から決定的に行を生成し、型変換・テンプレート・異常注入を行う純粋な計算層。
+# 接続先へ書き込まず、任意コードを評価しない。代表位置による事前検証は全行保証と区別する。
 """Deterministic declarative generation. No eval, SQL fragments, or Python execution."""
 
 from __future__ import annotations
@@ -16,16 +18,19 @@ from config import RunSpec
 
 
 class GenerationError(ValueError):
+    # 宣言した生成条件を実行できない場合の、利用者向けの検証例外。
     pass
 
 
 def record_key(spec, sequence):
+    """実行キー・シード・通番から再試行でも変わらないレコード識別子を作る。"""
     return hashlib.sha256(
         f"source.v2:{spec.run_key}:{spec.seed}:{sequence}".encode()
     ).hexdigest()[:32]
 
 
 def encode_json(value, *, pretty=False, limit=1024 * 1024):
+    """非有限数を拒否し、UTF-8のバイト数上限を守ってJSONへ直列化する。"""
     chunks = []
     size = 0
     encoder = json.JSONEncoder(
@@ -43,6 +48,7 @@ def encode_json(value, *, pretty=False, limit=1024 * 1024):
 
 
 def resolve(value, parameters):
+    """先頭がドル記号の値だけをパラメーター参照として解決する。"""
     if isinstance(value, str) and value.startswith("$"):
         key = value[1:]
         if key not in parameters:
@@ -52,6 +58,10 @@ def resolve(value, parameters):
 
 
 def render(template, values):
+    """項目名と短い数値書式だけを許可してテンプレートを展開する。
+
+    属性アクセスや変換指定は受け付けず、展開後の長さにも上限を設ける。
+    """
     parts = []
     for literal, name, format_spec, conversion in string.Formatter().parse(template):
         parts.append(literal)
@@ -77,6 +87,10 @@ def render(template, values):
 
 
 def coerce(value, field):
+    """項目定義に合わせて値を変換し、型・精度・NULLの制約を検査する。
+
+    小数は精度を保つ文字列、日時はUTCのISO表現として返す。
+    """
     if value is None:
         if field.primary_key:
             raise GenerationError("主キーはNULLにできません")
@@ -119,6 +133,11 @@ def coerce(value, field):
 
 
 def generate_record(spec: RunSpec, sequence: int, *, apply_anomalies=True, trace=None):
+    """通番に対応する一行を定義順に生成し、必要なら異常ルールを適用する。
+
+    乱数をレコードと項目ごとに固定するため、バッチ分割に依存しない。
+    参照項目は先に生成されている必要がある。
+    """
     row = {}
     key = record_key(spec, sequence)
     parameters = spec.parameters
@@ -127,6 +146,8 @@ def generate_record(spec: RunSpec, sequence: int, *, apply_anomalies=True, trace
             int(hashlib.sha256((key + ":" + field.name).encode()).hexdigest()[:16], 16)
         )
 
+        # 読解 generate_record.get: 現在の項目の属性を読み、ドル記号の参照ならspec.parametersから解決する。
+        # ループ中のfieldを即時参照する補助であり、後から実行するcallbackとして保存しない。
         def get(name):
             return resolve(getattr(field, name), parameters)
 
@@ -217,12 +238,19 @@ def generate_record(spec: RunSpec, sequence: int, *, apply_anomalies=True, trace
             left, right = row[condition.field], resolve(condition.value, parameters)
             op = condition.operator
             matches = {
+                # コールバック: 選択されたときだけ等値比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
                 "eq": lambda: left == right,
+                # コールバック: 選択されたときだけ不一致比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
                 "ne": lambda: left != right,
+                # コールバック: 選択されたときだけより大きい比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
                 "gt": lambda: left > right,
+                # コールバック: 選択されたときだけ以上比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
                 "ge": lambda: left >= right,
+                # コールバック: 選択されたときだけより小さい比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
                 "lt": lambda: left < right,
+                # コールバック: 選択されたときだけ以下比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
                 "le": lambda: left <= right,
+                # コールバック: 選択されたときだけ包含比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
                 "in": lambda: left in right,
             }[op]()
             if matches:
@@ -236,18 +264,31 @@ def generate_record(spec: RunSpec, sequence: int, *, apply_anomalies=True, trace
 
 
 def matches(left, operator, right):
+    """宣言済みの比較演算子を適用する。式の評価や演算子の推測はしない。"""
     return {
+        # コールバック: 選択されたときだけ等値比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
         "eq": lambda: left == right,
+        # コールバック: 選択されたときだけ不一致比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
         "ne": lambda: left != right,
+        # コールバック: 選択されたときだけより大きい比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
         "gt": lambda: left > right,
+        # コールバック: 選択されたときだけ以上比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
         "ge": lambda: left >= right,
+        # コールバック: 選択されたときだけより小さい比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
         "lt": lambda: left < right,
+        # コールバック: 選択されたときだけ以下比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
         "le": lambda: left <= right,
+        # コールバック: 選択されたときだけ包含比較を評価する無引数関数。左辺と右辺は現在の行の条件値。
         "in": lambda: left in right,
     }[operator]()
 
 
 def inject_anomalies(spec, row, sequence, trace=None):
+    """位置・確率・条件が一致した異常ルールを行へ順番に適用する。
+
+    コピー元は異常注入前の行から再生成し、再帰的な異常適用を避ける。
+    明示された検証迂回ルール以外は項目の型制約を再確認する。
+    """
     offset = sequence - spec.start_sequence
     fields = {f.name: f for f in spec.fields}
     for index, rule in enumerate(spec.anomalies):
@@ -326,6 +367,7 @@ def inject_anomalies(spec, row, sequence, trace=None):
 
 
 def sample_offsets(spec):
+    """先頭・途中・末尾と異常ルールの境界を含む代表位置を返す。"""
     offsets = {0, min(97, spec.rows - 1), spec.rows - 1}
     for rule in spec.anomalies:
         if rule.enabled and rule.from_row < spec.rows:
@@ -338,6 +380,7 @@ def sample_offsets(spec):
 
 def validate_generation(spec):
     # Check the beginning, a later point and the end without materializing the run.
+    """代表位置の生成とJSON展開を事前確認する。全行の成功保証ではない。"""
     for offset in sample_offsets(spec):
         sequence = spec.start_sequence + offset
         row = generate_record(spec, sequence)
@@ -360,6 +403,10 @@ def validate_generation(spec):
 
 
 def batch_limit(spec, requested):
+    """代表行のサイズからバッチ上限を見積もり、要求数とバースト幅で抑える。
+
+    全行を実体化しない近似値であり、最大行サイズの厳密な証明ではない。
+    """
     size = 256
     for offset in sample_offsets(spec):
         row = generate_record(spec, spec.start_sequence + offset)
@@ -396,6 +443,10 @@ def batch_limit(spec, requested):
 
 
 def map_json(template, row, parameters, metadata, depth=0):
+    """行・パラメーター・メタ情報への参照を、型を保ってJSON構造へ写す。
+
+    未知の参照と深すぎる入れ子を拒否する。通常の文字列は展開しない。
+    """
     if template is None:
         return row
     if depth > 32:
@@ -424,6 +475,7 @@ def map_json(template, row, parameters, metadata, depth=0):
 
 
 def stream_payload(spec, row, sequence):
+    """本文を組み立て、指定時だけ衝突しないキーへメタ情報を付ける。"""
     metadata = {
         "record_key": record_key(spec, sequence),
         "sequence": sequence,
@@ -442,5 +494,6 @@ def stream_payload(spec, row, sequence):
 
 
 def inject_fault(spec, ctx, stage, batch):
+    """異常シナリオが有効な場合だけ、指定段階の停止・遅延判定へ委譲する。"""
     if spec.faults.enabled and spec.faults.action != "none":
         ctx.inject(stage, batch)

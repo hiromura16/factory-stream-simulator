@@ -1,3 +1,4 @@
+# モジュール読解: 合成設定の検証、決定的な生成、公開APIと接続情報の分離を回帰確認する。
 import json
 import time
 from types import SimpleNamespace
@@ -21,6 +22,7 @@ from helptext import annotated_schemas
 from storage import ConfigStore
 
 
+# 読解 test_reproducible_and_split_sequences: 同じ通番を異なる分割で生成しても行の内容が一致することを確かめる。
 def test_reproducible_and_split_sequences():
     spec = RunSpec()
     a = [generate_record(spec, i) for i in range(30)]
@@ -31,6 +33,7 @@ def test_reproducible_and_split_sequences():
     assert generate_record(spec.model_copy(update={"seed": 44}), 0) != a[0]
 
 
+# 読解 test_custom_conditions_derived_values_and_nested_json: 条件付きの値、派生計算、入れ子JSONへの写像が組み合わせて動くことを確認する。
 def test_custom_conditions_derived_values_and_nested_json():
     spec = RunSpec(
         parameters={"states": ["OK", "NG"], "quantity": 12},
@@ -73,6 +76,7 @@ def test_custom_conditions_derived_values_and_nested_json():
     ) == {"value": 24.0, "inner": [12, "abc"]}
 
 
+# 読解 test_templates_cannot_execute_or_allocate_arbitrary_formats: テンプレートが許可しない参照や過大な書式を生成時に拒否することを確認する。
 @pytest.mark.parametrize(
     "template", ["{x.__class__}", "{x[0]}", "{x!r}", "{x:999999d}"]
 )
@@ -81,6 +85,7 @@ def test_templates_cannot_execute_or_allocate_arbitrary_formats(template):
         render(template, {"x": "abc"})
 
 
+# 読解 test_nullable_decimal_and_timezone: NULLを許す値、小数の正確な表現、時刻のUTC変換を確かめる。
 def test_nullable_decimal_and_timezone():
     spec = RunSpec(
         fields=[
@@ -110,6 +115,7 @@ def test_nullable_decimal_and_timezone():
     )
 
 
+# 読解 test_bad_references_and_invalid_primary_keys: 定義にない項目参照や不適切な主キー指定を成功として受け付けないことを確認する。
 def test_bad_references_and_invalid_primary_keys():
     with pytest.raises(ValidationError):
         RunSpec(fields=[FieldRule(name="same"), FieldRule(name="SAME")])
@@ -130,6 +136,7 @@ def test_bad_references_and_invalid_primary_keys():
     assert batch_limit(RunSpec(rows=100000000), 1000) <= 1000
 
 
+# 読解 test_profiles_encrypted_revisioned_and_never_export_secrets: リビジョン別の保存を確かめ、秘密値が公開出力に混ざらず保存側で暗号化されることを確認する。
 def test_profiles_encrypted_revisioned_and_never_export_secrets(tmp_path):
     store = ConfigStore(tmp_path / "vault")
     profile = ConnectionProfile(
@@ -168,6 +175,7 @@ def test_profiles_encrypted_revisioned_and_never_export_secrets(tmp_path):
     assert store.get_profile("api")[0].bearer_token is None
 
 
+# 読解 test_complete_inline_help: すべての設定項目について画面用ヘルプが構築できることを確認する。
 def test_complete_inline_help():
     for schema in annotated_schemas().values():
         for model in [schema, *schema.get("$defs", {}).values()]:
@@ -175,8 +183,11 @@ def test_complete_inline_help():
                 assert prop["title"] and len(prop["description"]) > 8
 
 
+# 読解 test_api_without_login_csrf_profile_preset_roundtrip_and_no_secret_echo: 無ログイン動作の保存・復元と異なるOriginからの更新拒否、および秘密値非表示をAPI経由で確かめる。
 def test_api_without_login_csrf_profile_preset_roundtrip_and_no_secret_echo(tmp_path):
     adapter = SimpleNamespace(
+        # コールバック: 任意の呼出引数を受ける無処理スタブ。実アダプターを起動せず、APIや履歴の振舞いだけを試験する。
+        # コールバック: 接続引数に依存せず成功の合成応答を返す。外部ネットワークを使わずAPI境界を試験する。
         handle=lambda *a: None, test_connection=lambda p: {"status": "ok"}
     )
     app = create_app("stream", "Test", adapter)
@@ -229,17 +240,21 @@ def test_api_without_login_csrf_profile_preset_roundtrip_and_no_secret_echo(tmp_
     assert app.state.config_store.get_preset("mine")["spec"] == spec
 
 
+# 読解 test_restart_recovers_history_and_marks_active_interrupted: 起動し直した履歴が残り、未終了の実行が中断として表示されることを確認する。
 def test_restart_recovers_history_and_marks_active_interrupted():
+    # コールバック: 任意の呼出引数を受ける無処理スタブ。実アダプターを起動せず、APIや履歴の振舞いだけを試験する。
     runtime = Runtime("test", lambda *a: None, 100000000)
     with runtime.connect() as conn:
         conn.execute(
             "INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?)",
             ("old", "running", "{}", "{}", "[]", None, "t", "t"),
         )
+    # コールバック: 任意の呼出引数を受ける無処理スタブ。実アダプターを起動せず、APIや履歴の振舞いだけを試験する。
     recovered = Runtime("test", lambda *a: None, 100000000)
     assert recovered.get("old")["status"] == "interrupted"
 
 
+# 読解 test_shipped_preset_library_validates_and_preserves_user_edits: 同梱プリセットを検証し、再初期化で既存の編集を上書きしないことを確かめる。
 def test_shipped_preset_library_validates_and_preserves_user_edits(tmp_path):
     from scripts.build_presets import library
     from pathlib import Path
@@ -272,6 +287,7 @@ def test_shipped_preset_library_validates_and_preserves_user_edits(tmp_path):
     assert store.get_preset(saved["id"])["spec"]["description"] == "user edit"
 
 
+# 読解 test_decimal_arithmetic_keeps_large_exact_values: 大きな小数の派生計算で有効桁が失われないことを確かめる。
 def test_decimal_arithmetic_keeps_large_exact_values():
     spec = RunSpec(
         fields=[
@@ -299,6 +315,7 @@ def test_decimal_arithmetic_keeps_large_exact_values():
     assert generate_record(spec, 0)["amount"] == "37037036703703703670.36"
 
 
+# 読解 test_anomalies_are_deterministic_scheduled_and_can_omit_values: 異常適用の位置と結果の再現性、設定で値を省略できることを検証する。
 def test_anomalies_are_deterministic_scheduled_and_can_omit_values():
     from config import AnomalyRule
 
@@ -329,6 +346,7 @@ def test_anomalies_are_deterministic_scheduled_and_can_omit_values():
     assert generate_record(spec, 0)["value"] == "N/A"
 
 
+# 読解 test_published_json_contract_includes_current_anomaly_and_fault_settings: 配布するJSONスキーマに現行の異常値および処理障害の設定が含まれるか照合する。
 def test_published_json_contract_includes_current_anomaly_and_fault_settings():
     import json
     from pathlib import Path

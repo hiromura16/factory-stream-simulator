@@ -1,3 +1,5 @@
+# モジュール読解: 設定画面用の日本語説明と接続方式の説明をJSON Schemaへ付ける。
+# HELPのキーはモデル項目と対応させる。説明追加時もenum・default・型制約は変えない。
 """Japanese in-place documentation, shared by the form and JSON contracts."""
 
 from config import ConnectionProfile, RunSpec
@@ -789,6 +791,8 @@ HELP["kind"] = (
 )
 
 
+# 読解 annotated_schemas: RunSpecと接続モデルから新しいJSON Schemaを作り、日本語の表示説明を注釈して返す。
+# kind指定時は接続方式を絞る。元のPydanticモデルや保存済み契約ファイルは変更しない。
 def annotated_schemas(kind=None):
     from config import ALLOWED_KINDS
 
@@ -797,6 +801,8 @@ def annotated_schemas(kind=None):
         "connection": ConnectionProfile.model_json_schema(),
     }
 
+    # 読解 annotated_schemas.annotate: propertiesをHELPと対応させ、その場でtitle/descriptionを設定して$defsも再帰処理する。
+    # HELPにキーがない場合はKeyErrorで不整合を露出させ、黙って説明を欠落させない。
     def annotate(schema):
         for name, prop in schema.get("properties", {}).items():
             title, description = HELP[name]

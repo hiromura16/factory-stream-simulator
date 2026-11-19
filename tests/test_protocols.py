@@ -1,3 +1,4 @@
+# モジュール読解: 明示設定がある場合に限り、ブローカーの疎通と実配送確認を試験する。
 """Opt-in real broker checks; fixture credentials are never committed."""
 
 import json
@@ -12,6 +13,7 @@ from conftest import Context
 from stream_adapter import handle, test_connection as check_connection
 
 
+# 読解 test_real_broker_confirmations: 実ブローカー向けプロファイルで、設定済み方式が接続でき、3件の配送が確認されることを検証する。
 @pytest.mark.skipif(
     not os.environ.get("STREAM_TEST_PROFILES_FILE"), reason="External brokers opt-in"
 )
