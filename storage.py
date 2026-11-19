@@ -1,3 +1,5 @@
+# モジュール読解: 接続設定は暗号化して版を保持し、プリセットはJSONとしてSQLiteへ保存する。
+# 公開用表現と内部の秘密値を分け、接続先を変えた際の秘密値継承を制限する。
 """Persistent encrypted connection profiles and credential-free JSON presets."""
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from config import ConnectionProfile, RunSpec, SECRET_FIELDS
 
 
 def credential_scope(profile):
+    """接続先変更時に秘密値を引き継いでよいかを比較する属性群を返す。"""
     return tuple(
         getattr(profile, k)
         for k in (
@@ -42,7 +45,9 @@ def credential_scope(profile):
 
 
 class ConfigStore:
+    """暗号化した接続履歴と、生成条件のプリセットをSQLiteへ保存する。"""
     def __init__(self, root):
+        """保存領域と暗号鍵を準備する。既存DBの鍵欠落時は再発行せず停止する。"""
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = self.root / "config-v2.sqlite3"
@@ -73,6 +78,7 @@ class ConfigStore:
 
     @contextmanager
     def connect(self):
+        """トランザクションを管理し、成功・失敗のどちらでも接続を閉じる。"""
         conn = sqlite3.connect(self.db, timeout=15)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
@@ -84,6 +90,7 @@ class ConfigStore:
             conn.close()
 
     def get_profile(self, identity, revision=None):
+        """最新または指定リビジョンを復号して返す。未登録ならKeyErrorにする。"""
         with self.connect() as conn:
             if revision is None:
                 row = conn.execute(
@@ -101,6 +108,7 @@ class ConfigStore:
 
     @staticmethod
     def public(profile, revision=None):
+        """秘密値を除いた表示用情報を返し、設定の有無だけを別項目で示す。"""
         data = profile.model_dump(
             mode="json", exclude=set(SECRET_FIELDS) | {"clear_secrets", "headers"}
         )
@@ -116,6 +124,7 @@ class ConfigStore:
         return data
 
     def profiles(self):
+        """名前順の接続一覧を、秘密値を含まない形式で返す。"""
         with self.connect() as conn:
             identities = [
                 row[0]
@@ -124,6 +133,11 @@ class ConfigStore:
         return [self.public(*self.get_profile(identity)) for identity in identities]
 
     def save_profile(self, profile):
+        """接続を暗号化して履歴へ追記し、公開可能な表示用情報を返す。
+
+        省略した秘密値を継承するのは接続スコープが同じ場合だけ。
+        明示した削除指定は継承より優先し、旧リビジョンは保持する。
+        """
         with self.lock:
             try:
                 old, previous = self.get_profile(profile.id)
@@ -180,6 +194,7 @@ class ConfigStore:
             return self.public(private, revision)
 
     def save_preset(self, identity, spec):
+        """検証済みの生成条件を指定IDで保存する。既存IDは更新する。"""
         with self.connect() as conn:
             conn.execute(
                 "INSERT INTO presets VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET spec=excluded.spec,updated_at=excluded.updated_at",
@@ -192,6 +207,7 @@ class ConfigStore:
         return {"id": identity, "name": spec.name, "spec": spec.model_dump(mode="json")}
 
     def get_preset(self, identity):
+        """保存済みJSONを現行モデルで再検証して返す。未登録ならKeyErrorにする。"""
         with self.connect() as conn:
             row = conn.execute(
                 "SELECT spec FROM presets WHERE id=?", (identity,)
@@ -202,6 +218,7 @@ class ConfigStore:
         return {"id": identity, "name": spec.name, "spec": spec.model_dump(mode="json")}
 
     def presets(self):
+        """更新日時とIDの順に、保存済みプリセットを返す。"""
         with self.connect() as conn:
             identities = [
                 row[0]
@@ -210,6 +227,7 @@ class ConfigStore:
         return [self.get_preset(identity) for identity in identities]
 
     def seed_presets(self, directory, transform=None):
+        """未登録IDだけを同梱JSONから補う。既存の利用者設定は上書きしない。"""
         for path in sorted(Path(directory).glob("*.json")):
             try:
                 self.get_preset(path.stem)

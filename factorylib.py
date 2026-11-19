@@ -1,3 +1,5 @@
+# モジュール読解: アプリの組立て、保存設定、実行履歴、協調停止とAPI境界を担う共通層。
+# アダプターだけが方式固有の生成・送信を行い、例外の秘密情報はこの境界で外へ出さない。
 """Independent source runtime with declarative profiles and presets."""
 
 from __future__ import annotations
@@ -40,10 +42,14 @@ CONTRACT_VERSION = "source.preset.v2"
 
 
 class JobCancelled(Exception):
+    # 利用者の停止要求または実行時間上限による協調停止を表す。
     pass
 
 
 class JobContext:
+    """アダプターへ停止判定・進捗・負荷調整を提供する実行単位の状態。"""
+    # 読解 JobContext.__init__: runtime・run_id・停止イベントを受け取り、一実行の計数と単調時計を初期化する。
+    # 出力履歴や異常注入回数は実行間で共有せず、永続化はprogressに任せる。
     def __init__(self, runtime, run_id, stop):
         self.runtime, self.run_id, self.stop = runtime, run_id, stop
         self.stats = {
@@ -63,6 +69,7 @@ class JobContext:
         self.injected_faults = 0
 
     def check(self):
+        """停止・時間・空き容量・メモリー余力を確認し、継続不能なら例外にする。"""
         if self.stop.is_set():
             raise JobCancelled()
         if (
@@ -83,10 +90,12 @@ class JobContext:
                     raise RuntimeError("host_memory_headroom_low")
 
     def wait(self, milliseconds):
+        """待機中も停止イベントを受け付ける。停止時は協調停止の例外にする。"""
         if self.stop.wait(milliseconds / 1000):
             raise JobCancelled()
 
     def progress(self, **increments):
+        """実績を加算し、経過時間と直近の出力情報を実行履歴へ保存する。"""
         for name, value in increments.items():
             self.stats[name] = self.stats.get(name, 0) + value
         elapsed = max(0.001, time.monotonic() - self.started)
@@ -95,6 +104,7 @@ class JobContext:
         self.runtime.update(self.run_id, stats=self.stats, outputs=self.outputs[-10:])
 
     def inject(self, stage, batch):
+        """段階とバッチ位置が一致する異常注入を、回数上限内で実行する。"""
         fault = self.spec.faults
         if (
             not fault.enabled
@@ -118,6 +128,7 @@ class JobContext:
             self.wait(min(200, max(0, (end - time.monotonic()) * 1000)))
 
     def pace(self, completed):
+        """完了件数に合わせてバースト休止と目標レートの待機を行う。"""
         if not self.spec:
             return
         if self.spec.burst_rows:
@@ -144,7 +155,9 @@ class JobContext:
 
 
 class Runtime:
+    """単一の実行枠とSQLite履歴を管理し、アダプターをワーカースレッドで動かす。"""
     def __init__(self, kind, handler, max_cycles):
+        """履歴を初期化し、前プロセスの実行中レコードを中断状態にする。"""
         self.kind, self.handler, self.max_cycles = kind, handler, max_cycles
         self.data_dir = Path(os.environ.get("DATA_DIR", "./data")).resolve()
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +176,7 @@ class Runtime:
 
     @contextmanager
     def connect(self):
+        """実行履歴用トランザクションを開き、終了時に必ず接続を閉じる。"""
         conn = sqlite3.connect(self.database, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
@@ -174,6 +188,7 @@ class Runtime:
             conn.close()
 
     def update(self, run_id, **values):
+        """更新可能な列だけを受け付け、JSON項目を直列化して履歴を更新する。"""
         values["updated_at"] = datetime.now(timezone.utc).isoformat()
         for key in ["stats", "outputs"]:
             if key in values:
@@ -190,6 +205,7 @@ class Runtime:
 
     @staticmethod
     def unpack(row):
+        """履歴のJSON項目を復元する。対象がなければHTTP 404を返す。"""
         if row is None:
             raise HTTPException(404, "実行が見つかりません")
         value = dict(row)
@@ -198,12 +214,14 @@ class Runtime:
         return value
 
     def get(self, run_id):
+        """指定実行の保存済み状態を返す。処理の完了までは待たない。"""
         with self.connect() as conn:
             return self.unpack(
                 conn.execute("SELECT * FROM jobs WHERE id=?", (run_id,)).fetchone()
             )
 
     def list(self):
+        """新しい順で最大30件の実行履歴を返す。"""
         with self.connect() as conn:
             return [
                 self.unpack(r)
@@ -213,10 +231,12 @@ class Runtime:
             ]
 
     def validate(self, spec):
+        """実行件数がランタイムの上限以内かを確認する。"""
         if spec.rows > self.max_cycles:
             raise HTTPException(422, f"1回の上限は{self.max_cycles}レコードです")
 
     def start(self, spec):
+        """実行枠を排他確保し、履歴作成後にワーカースレッドを開始する。"""
         self.validate(spec)
         with self.lock:
             if self.active:
@@ -247,6 +267,11 @@ class Runtime:
             return self.get(run_id)
 
     def execute(self, run_id, spec, stop):
+        """アダプターの終了状態を保存し、最後に実行枠を解放する。
+
+        ドライバー例外の本文は秘密値を含む可能性があるため、既知の安全な
+        コード以外は例外の型名だけを記録する。
+        """
         ctx = JobContext(self, run_id, stop)
         ctx.spec = spec
         status, error = "completed", None
@@ -286,6 +311,7 @@ class Runtime:
                 self.active = None
 
     def cancel(self, run_id):
+        """現在の実行だけに停止を要求する。即時ロールバックは保証しない。"""
         with self.lock:
             if run_id != self.active:
                 raise HTTPException(409, "実行中ではありません")
@@ -294,12 +320,16 @@ class Runtime:
         return self.get(run_id)
 
 
+# 読解 RetryRequest: 再送APIの入力。接続ID・件数上限・バッチ幅を型と範囲で制限する。
+# モデルdocstringは公開JSON Schemaへ反映されるため、この説明はコメントに置く。
 class RetryRequest(BaseModel):
     connection_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
     limit: int = Field(default=1000, ge=1, le=1000000)
     batch_size: int = Field(default=100, ge=1, le=1000)
 
 
+# 読解 UploadedConnectionFile: 接続補助ファイル名とBase64本文の入力モデル。名前と符号化文字列の長さを制約する。
+# 復号後の実サイズ・ルート内判定はアップロード処理で別途行う。
 class UploadedConnectionFile(BaseModel):
     name: str = Field(
         min_length=1,
@@ -309,6 +339,8 @@ class UploadedConnectionFile(BaseModel):
     content_base64: str = Field(max_length=1500000)
 
 
+# 読解 bootstrap_profiles: defaultが保存済みなら何も変更しない。未登録時だけ種類と環境設定から初期接続を保存する。
+# 秘密値ファイルを読む分岐があり、単なる表示用関数ではない。実接続はここでは行わない。
 def bootstrap_profiles(kind, store):
     try:
         store.get_profile("default")
@@ -373,10 +405,16 @@ def bootstrap_profiles(kind, store):
 
 
 def create_app(kind, title, adapter):
+    """接続保存・プリセット・実行管理を組み合わせてアプリを構築する。
+
+    構築時に保存領域を初期化するため、純粋なスキーマ取得関数ではない。
+    """
     root = Path(__file__).resolve().parent
     store = ConfigStore(Path(os.environ.get("DATA_DIR", "./data")) / "settings")
     bootstrap_profiles(kind, store)
 
+    # 読解 create_app.initial_preset: 初期SQL Server接続が同梱の検証DBを指す場合だけ、未指定schemaをsyntheticへ補完する。
+    # 入力specを変更して返す。保存済みプリセットにはseed_presets側で再適用しない。
     def initial_preset(spec):
         current, _ = store.get_profile("default")
         if (
@@ -390,6 +428,8 @@ def create_app(kind, title, adapter):
 
     store.seed_presets(root / "presets", initial_preset)
 
+    # 読解 create_app.dispatch: 実行時に指定リビジョンの接続を読み、taskに応じて生成か再送のアダプターを呼ぶ。
+    # 秘密値は接続オブジェクト内に保持し、処理例外はRuntime側へ伝える。
     def dispatch(spec, ctx):
         profile, _ = store.get_profile(spec.connection_id, spec.connection_revision)
         (adapter.retry if spec.task == "retry" else adapter.handle)(
@@ -398,6 +438,8 @@ def create_app(kind, title, adapter):
 
     runtime = Runtime(kind, dispatch, 100000000)
 
+    # 読解 create_app.lifespan: アプリ終了時に停止イベントを立て、実行中スレッドを最大20秒待つ。
+    # 待機期限後の強制終了やDBロールバックはこの関数では行わない。
     @asynccontextmanager
     async def lifespan(app):
         yield
@@ -410,6 +452,8 @@ def create_app(kind, title, adapter):
     app.state.config_store = store
     app.state.kind = kind
 
+    # 読解 create_app.validation_error: 入力検証エラーをHTTP 422へ変換し、位置・説明・型だけを返す。
+    # 秘密値を含み得るリクエスト本文や入力値をそのまま応答へ転載しない。
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
         # Never echo request bodies: connection forms contain write-only credentials.
@@ -423,6 +467,8 @@ def create_app(kind, title, adapter):
             status_code=422,
         )
 
+    # 読解 create_app.protect: ヘルス以外の要求を検査し、変更要求のOrigin・JSON形式・宣言サイズを拒否条件と照合する。
+    # 正常応答にはブラウザー向け安全ヘッダーを付ける。本文の全受信サイズを測る処理ではない。
     @app.middleware("http")
     async def protect(request: Request, call_next):
         if request.url.path == "/healthz":
@@ -461,14 +507,18 @@ def create_app(kind, title, adapter):
 
     app.mount("/static", StaticFiles(directory=root / "static"), name="static")
 
+    # 読解 create_app.index: 同梱のstatic/index.htmlをFileResponseで返す。設定を生成したりジョブを開始したりしない。
     @app.get("/")
     def index():
         return FileResponse(root / "static/index.html")
 
+    # 読解 create_app.health: サービス種別と版を返す軽量ヘルス応答。外部接続や下流の健全性は検査しない。
     @app.get("/healthz")
     def health():
         return {"status": "ok", "service": kind, "version": "0.2.0"}
 
+    # 読解 create_app.profile: IDと任意リビジョンで接続を読み、現在のツールが許可する方式か検査して版と共に返す。
+    # 未登録は404、方式不一致は422に変換し、呼出先へ無検査の接続を渡さない。
     def profile(identity, revision=None):
         try:
             value, version = store.get_profile(identity, revision)
@@ -478,6 +528,8 @@ def create_app(kind, title, adapter):
             raise HTTPException(422, "このツールでは使用できない接続方式です")
         return value, version
 
+    # 読解 create_app.checked: 生成条件を代表位置で検証し、ツール違いの再送・ファイル破損指定を拒否する。
+    # 利用者向け生成例外以外の型エラー詳細は一般化して422を返す。全行保証ではない。
     def checked(spec):
         if kind != "stream" and spec.task != "generate":
             raise HTTPException(422, "再送はストリームツールだけで使用できます")
@@ -498,6 +550,8 @@ def create_app(kind, title, adapter):
             ) from None
         return spec
 
+    # 読解 create_app.safe_call: 指定処理を呼び、HTTP例外は維持し、生成検証は422・接続処理失敗は503へ変換する。
+    # ドライバー由来の本文には秘密値が含まれ得るので、型名だけを外部へ返す。
     def safe_call(callback, *args):
         try:
             return callback(*args)
@@ -511,6 +565,8 @@ def create_app(kind, title, adapter):
                 f"接続先の処理に失敗しました ({type(exc).__name__})。接続情報・権限・対象の構造を確認してください。",
             ) from None
 
+    # 読解 create_app.information: 画面に必要な既定RunSpec、利用可能接続方式とヘルプを返す。
+    # 保存済みdefault接続を参照するが、秘密値そのものは応答へ含めない。
     @app.get("/api/info")
     def information():
         from helptext import CONNECTION_HELP
@@ -540,12 +596,16 @@ def create_app(kind, title, adapter):
             },
         }
 
+    # 読解 create_app.schemas: 現在のツール向けに注釈した生成・接続JSON Schemaを返す。
+    # HELPの登録漏れを隠して空説明へ置換せず、モデルとの整合性を維持する。
     @app.get("/api/schemas")
     def schemas():
         from helptext import annotated_schemas
 
         return annotated_schemas(kind)
 
+    # 読解 create_app.files_root: 接続補助ファイルの保存ディレクトリを設定から正規化し、必要なら作成して返す。
+    # 対象はstore配下の既定領域か明示設定であり、成果物のlandingとは別管理する。
     def files_root():
         path = Path(
             os.environ.get(
@@ -555,6 +615,8 @@ def create_app(kind, title, adapter):
         path.mkdir(parents=True, exist_ok=True, mode=0o700)
         return path
 
+    # 読解 create_app.connection_files: 補助ファイルの相対名とサイズを最大200件返す。
+    # シンボリックリンクと本文は返さず、秘密値を含み得るファイル内容を露出しない。
     @app.get("/api/connection-files")
     def connection_files():
         root = files_root()
@@ -566,6 +628,8 @@ def create_app(kind, title, adapter):
             ][:200]
         }
 
+    # 読解 create_app.upload_connection_file: 名前とBase64を検査し、1MiB以内の内容を専用ルートへ権限600で保存する。
+    # 一時名を排他的に作り同期後に置換する。既存同名ファイルの更新は許される。
     @app.post("/api/connection-files")
     def upload_connection_file(value: UploadedConnectionFile):
         root = files_root()
@@ -593,6 +657,8 @@ def create_app(kind, title, adapter):
             temp.unlink(missing_ok=True)
         return {"name": value.name, "bytes": len(content), "permissions": "600"}
 
+    # 読解 create_app.connections: 保存済み接続の公開用一覧から、現在のツールで利用できる方式だけを返す。
+    # 秘密値の除外はstore.profilesの表示用変換で行う。
     @app.get("/api/connections")
     def connections():
         return {
@@ -601,12 +667,16 @@ def create_app(kind, title, adapter):
             ]
         }
 
+    # 読解 create_app.save_connection: ツールが扱える方式かを検査して接続を保存し、秘密値を除いた結果を返す。
+    # 認証情報の継承・削除・リビジョン追加はConfigStoreに集約する。
     @app.post("/api/connections")
     def save_connection(value: ConnectionProfile):
         if value.kind not in ALLOWED_KINDS[kind]:
             raise HTTPException(422, "このツールでは使用できない接続方式です")
         return store.save_profile(value)
 
+    # 読解 create_app.export_connection: 指定接続の公開用データから設定済み秘密値のメタ情報も除いて返す。
+    # 秘密値やヘッダー値をエクスポートする経路にはしない。
     @app.get("/api/connections/{identity}/export")
     def export_connection(identity: str):
         value, revision = profile(identity)
@@ -615,15 +685,20 @@ def create_app(kind, title, adapter):
             result.pop(key, None)
         return result
 
+    # 読解 create_app.test_connection: 保存済み接続を解決し、アダプターの疎通試験を安全な例外変換付きで呼ぶ。
+    # 実接続を伴い得るため、プレビューとは異なる操作である。
     @app.post("/api/connections/{identity}/test")
     def test_connection(identity: str):
         value, _ = profile(identity)
         return safe_call(adapter.test_connection, value)
 
+    # 読解 create_app.presets: 保存済みプリセットの一覧を返す。実行は開始せず、履歴との結合も行わない。
     @app.get("/api/presets")
     def presets():
         return {"presets": store.presets()}
 
+    # 読解 create_app.save_preset: IDの許可文字と生成条件を検証して保存する。既存IDは更新対象となる。
+    # 生成条件の検証は接続先に書き込む試験を意味しない。
     @app.post("/api/presets/{identity}")
     def save_preset(identity: str, spec: RunSpec):
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", identity):
@@ -632,6 +707,7 @@ def create_app(kind, title, adapter):
             )
         return store.save_preset(identity, checked(spec))
 
+    # 読解 create_app.export_preset: 指定IDのspecだけを返す。未登録IDは安全な404に変換する。
     @app.get("/api/presets/{identity}/export")
     def export_preset(identity: str):
         try:
@@ -639,6 +715,8 @@ def create_app(kind, title, adapter):
         except KeyError:
             raise HTTPException(404, "プリセットが見つかりません") from None
 
+    # 読解 create_app.preview: 先頭と異常境界を含む最大12位置を生成し、本文・異常hit・推定値を返す。
+    # 接続・書込み・送信は行わない。表示サンプルの成功を全行や下流成功と扱わない。
     @app.post("/api/preview")
     def preview(spec: RunSpec):
         checked(spec)
@@ -689,24 +767,31 @@ def create_app(kind, title, adapter):
             "note": "プレビューでは接続・書き込み・送信しません。正常位置と異常条件の開始位置を含むサンプルを表示します。目標速度は性能保証ではありません。",
         }
 
+    # 読解 create_app.start: 条件と接続を確認し、その時点のリビジョンへ固定して非同期実行を開始する。
+    # HTTP 202は受付であり、生成や配送の完了を意味しない。
     @app.post("/api/runs", status_code=202)
     def start(spec: RunSpec):
         checked(spec)
         _, revision = profile(spec.connection_id, spec.connection_revision)
         return runtime.start(spec.model_copy(update={"connection_revision": revision}))
 
+    # 読解 create_app.runs: 実行履歴の一覧を返す。稼働状態の取得だけで新しいジョブを作らない。
     @app.get("/api/runs")
     def runs():
         return {"runs": runtime.list()}
 
+    # 読解 create_app.run: 指定run_idの保存済み状態を返す。存在しない場合の404はRuntimeが担う。
     @app.get("/api/runs/{run_id}")
     def run(run_id: str):
         return runtime.get(run_id)
 
+    # 読解 create_app.stop: 指定run_idへ協調停止を要求して現在状態を返す。即時停止・巻戻しは保証しない。
     @app.post("/api/runs/{run_id}/stop")
     def stop(run_id: str):
         return runtime.cancel(run_id)
 
+    # 読解 create_app.source: streamではoutbox集計、他方式ではdefault接続の疎通結果を返す。
+    # 後者は外部I/Oを伴い得るため、単なる保存設定一覧とは区別する。
     @app.get("/api/source")
     def source():
         if kind == "stream":
@@ -714,6 +799,8 @@ def create_app(kind, title, adapter):
         value, _ = profile("default")
         return safe_call(adapter.test_connection, value)
 
+    # 読解 create_app.metrics: 履歴DBを状態別に集計し、Prometheusテキストのジョブ件数を返す。
+    # 秘密値やジョブ本文はメトリクスへ含めない。
     @app.get("/metrics", response_class=PlainTextResponse)
     def metrics():
         with runtime.connect() as conn:
@@ -726,17 +813,21 @@ def create_app(kind, title, adapter):
 
     if kind == "sql":
 
+        # 読解 create_app.prepare: SQL用入力を検証して表準備を依頼する。対象がない場合はDDLを実行し得る操作。
+        # 接続プロファイルを解決し、失敗の詳細はsafe_callで一般化する。
         @app.post("/api/table/prepare")
         def prepare(spec: RunSpec):
             checked(spec)
             value, _ = profile(spec.connection_id, spec.connection_revision)
             return safe_call(adapter.prepare_table, value, spec)
 
+        # 読解 create_app.inspect_table: SQL接続を解決して既存表の構造を取得する。表作成は要求しない。
         @app.post("/api/table/inspect")
         def inspect_table(spec: RunSpec):
             value, _ = profile(spec.connection_id, spec.connection_revision)
             return safe_call(adapter.inspect_table, value, spec)
 
+        # 読解 create_app.ddl: 接続方式に合うDDL文字列をアダプターから取得する。DDL適用は要求しない。
         @app.post("/api/table/ddl")
         def ddl(spec: RunSpec):
             value, _ = profile(spec.connection_id, spec.connection_revision)
@@ -744,16 +835,21 @@ def create_app(kind, title, adapter):
 
     if kind == "files":
 
+        # 読解 create_app.image: 保存済み実行を取得し、画像応答をアダプターへ依頼する。
+        # リモート成果物の読出しを伴い得るが、再生成はしない。
         @app.get("/api/runs/{run_id}/image")
         def image(run_id: str):
             return safe_call(adapter.artifact, runtime.get(run_id), store)
 
     if kind == "stream":
 
+        # 読解 create_app.outbox: streamの送信待ち・配送済み集計を返す。配送操作とは分離する。
         @app.get("/api/outbox")
         def outbox():
             return adapter.summary()
 
+        # 読解 create_app.retry: 現在の接続版と上限から再送専用RunSpecを作り、通常の実行枠で開始する。
+        # 未配送データの抽出と宛先一致確認はアダプター側で行う。
         @app.post("/api/outbox/retry", status_code=202)
         def retry(value: RetryRequest):
             _, revision = profile(value.connection_id)

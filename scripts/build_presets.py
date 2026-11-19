@@ -1,3 +1,4 @@
+# モジュール読解: 宣言した通常・異常シナリオから配布プリセットと一覧を生成する。既存CLI説明は維持する。
 """Rebuild the public, credential-free preset library. No network or writes to a DB."""
 
 from __future__ import annotations
@@ -11,9 +12,11 @@ from config import RunSpec, FieldRule, Condition  # noqa: E402
 from generation import validate_generation  # noqa: E402
 
 
+# 読解 library: 指定用途に対応する通常・異常シナリオを、ID付きの実行設定に組み立てる。
 def library(kind):
     result = {}
 
+    # 読解 library.add: 用途別の共通テンプレートと表示説明から1件の設定を作り、IDで一覧に登録する。
     def add(identity, name, description, rows=120, rate=0):
         spec = RunSpec(
             name=name,
@@ -678,6 +681,7 @@ def library(kind):
     return result
 
 
+# 読解 write_library: 各プリセットをJSONに書き出し、件数や用途も掲載したREADMEを同じ出力先に作る。
 def write_library(kind, directory):
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)

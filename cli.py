@@ -1,3 +1,5 @@
+# モジュール読解: APIを操作するCLI入口。引数を解析し、操作名から固定ルートと必要なJSON本文を選ぶ。
+# 認証ファイルを読みHTTP要求を送るため、ヘルプ表示以外は実サービス操作になり得る。
 import argparse
 import base64
 import json

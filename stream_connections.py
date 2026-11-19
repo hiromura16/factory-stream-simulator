@@ -1,3 +1,4 @@
+# モジュール読解: ブローカー固有の接続と配送確認を共通アダプターから分離する。配送完了の意味は方式ごとに異なる。
 """Additional broker transports. Each adapter defines its own acknowledgement boundary."""
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from connection_security import connection_file, secret, tls_context
 from generation import GenerationError
 
 
+# 読解 headers: 設定済みの追加ヘッダーを取り出し、選ばれた認証方式のヘッダーを組み立てる。戻り値には送信時だけ使う秘密値が含まれる。
 def headers(p):
     values = {
         name: value.get_secret_value()
@@ -32,6 +34,7 @@ def headers(p):
     return values
 
 
+# 読解 validate_topic: 空名・制御文字を拒否し、Kafka名・NATS subject・AMQP routing keyの個別制約も確認する。
 def validate_topic(kind, topic):
     if not topic or any(ord(c) < 32 for c in topic):
         raise GenerationError("配送先の名前が不正です")
@@ -51,7 +54,9 @@ def validate_topic(kind, topic):
         raise GenerationError("AMQP routing keyは255バイト以内にしてください")
 
 
+# 読解 Kafka: レコード識別子をキーとして送信し、キューの残りと配送コールバックで成功を判断する。
 class Kafka:
+    # 読解 Kafka.__init__: TLSとSASLの組合せ、通信時間上限、冪等送信を設定し、Producerを準備する。
     def __init__(self, p):
         from confluent_kafka import Producer
 
@@ -89,13 +94,16 @@ class Kafka:
                 options["ssl.key.password"] = secret(p, "tls_key_password")
         self.client = Producer(options)
 
+    # 読解 Kafka.test: クラスタのメタデータを問い合わせる。疎通試験ではイベントを発行しない。
     def test(self):
         self.client.list_topics(timeout=self.p.timeout_seconds)
         return {"status": "connected", "published": False}
 
+    # 読解 Kafka.send: トピックを検証してキューに追加し、全件の完了待ち後に残件や配送エラーを拒否する。
     def send(self, entries):
         failures = []
 
+        # 読解 Kafka.send.ack: ブローカー配送結果のコールバック。失敗コードだけを外側の一覧に残す。
         def ack(error, message):
             if error:
                 failures.append(error.code())
@@ -112,11 +120,14 @@ class Kafka:
         if self.client.flush(self.p.timeout_seconds) or failures:
             raise ConnectionError("Kafkaの配送確認に失敗しました")
 
+    # 読解 Kafka.close: 終了前に最長2秒の範囲で未送信キューの排出を待つ。
     def close(self):
         self.client.flush(min(2, self.p.timeout_seconds))
 
 
+# 読解 AMQP: 配信確認を有効にしたチャネルでルーティング必須の永続メッセージを扱う。
 class AMQP:
+    # 読解 AMQP.__init__: 認証・必要なTLS・タイムアウトを指定して接続し、配送確認付きチャネルを開く。
     def __init__(self, p):
         import pika
 
@@ -140,9 +151,11 @@ class AMQP:
         self.channel = self.client.channel()
         self.channel.confirm_delivery()
 
+    # 読解 AMQP.test: 構築時の接続成立を報告する。発行やキューの宣言はしない。
     def test(self):
         return {"status": "connected", "published": False}
 
+    # 読解 AMQP.send: 必要時だけ既定交換先向けのキューを宣言し、レコードIDを持つメッセージを発行する。
     def send(self, entries):
         import pika
 
@@ -169,12 +182,15 @@ class AMQP:
             )
         self.client.process_data_events(time_limit=0)
 
+    # 読解 AMQP.close: 接続がまだ開いている場合だけ閉じる。
     def close(self):
         if self.client.is_open:
             self.client.close()
 
 
+# 読解 NATS: 同期呼出側と非同期クライアントの間を専用イベントループでつなぐ。
 class NATS:
+    # 読解 NATS.__init__: 認証・TLSを選んで再接続なしの接続を開始する。初期接続失敗時はループとスレッドを停止する。
     def __init__(self, p):
         import nats
 
@@ -211,16 +227,20 @@ class NATS:
             self.loop.close()
             raise
 
+    # 読解 NATS.call: 別スレッドのループにコルーチンを渡し、設定時間に猶予を加えた範囲で結果を待つ。
     def call(self, coroutine):
         return asyncio.run_coroutine_threadsafe(coroutine, self.loop).result(
             timeout=self.p.timeout_seconds + 2
         )
 
+    # 読解 NATS.test: 現在の接続をflushして疎通を確かめる。イベントは発行しない。
     def test(self):
         self.call(self.client.flush(timeout=self.p.timeout_seconds))
         return {"status": "connected", "published": False}
 
+    # 読解 NATS.send: 通常発行とJetStream発行を切り替え、最後に送信キューのflushを待つ。
     def send(self, entries):
+        # 読解 NATS.send.publish: ループ上で各subjectを検査して順次発行する。JetStreamにだけ重複識別子を付ける。
         async def publish():
             js = (
                 self.client.jetstream(timeout=self.p.timeout_seconds)
@@ -241,6 +261,7 @@ class NATS:
 
         self.call(publish())
 
+    # 読解 NATS.close: 非同期接続の終了後、失敗時もループ停止・スレッド待ち・ループ解放を実施する。
     def close(self):
         try:
             if self.client:
@@ -251,7 +272,9 @@ class NATS:
             self.loop.close()
 
 
+# 読解 WebSocket: 同期接続で本文を発行する。確認応答を要求するかは接続設定に従う。
 class WebSocket:
+    # 読解 WebSocket.__init__: TLS指定とURLを照合し、認証ヘッダーやサブプロトコルを付けて直接接続する。
     def __init__(self, p):
         from websockets.sync.client import connect
 
@@ -270,9 +293,11 @@ class WebSocket:
             options["subprotocols"] = p.websocket_subprotocols
         self.client = connect(p.url, **options)
 
+    # 読解 WebSocket.test: すでに確立した接続の状態を報告する。本文は送らない。
     def test(self):
         return {"status": "connected", "published": False}
 
+    # 読解 WebSocket.send: 各本文を送り、確認方式に応じて応答を待つ。部分失敗や不正応答は成功にしない。
     def send(self, entries):
         for entry in entries:
             self.client.send(entry["payload"])
@@ -290,6 +315,7 @@ class WebSocket:
                 elif str(ack).strip().lower() not in {"ok", "ack", "accepted"}:
                     raise ConnectionError("WebSocketの受信確認が不正です")
 
+    # 読解 WebSocket.close: 同期WebSocket接続を閉じる。
     def close(self):
         self.client.close()
 

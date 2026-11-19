@@ -1,3 +1,4 @@
+# 読解: パッケージ名・Python範囲と実行依存を宣言する。解決済みの固定版はlockとrequirementsを参照する。
 [project]
 name = 'factory-stream-simulator'
 version = "0.2.0"
@@ -14,9 +15,11 @@ dependencies = [
     "websockets>=15,<17",
 ]
 
+# 読解: 開発・テスト用の依存。アプリ実行依存と分けて管理する。
 [dependency-groups]
 dev = ["httpx==0.28.1", "pytest==8.4.2"]
 
+# 読解: テストの探索範囲とimportルート。実接続試験の有効化とは別である。
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
