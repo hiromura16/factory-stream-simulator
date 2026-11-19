@@ -1,0 +1,1110 @@
+{
+  "$defs": {
+    "AnomalyRule": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "default": "異常注入",
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "表示名",
+          "type": "string",
+          "description": "一覧と実行履歴に表示する名前。業種や工場の種類を指定する必要はありません。"
+        },
+        "enabled": {
+          "default": true,
+          "title": "異常注入を有効にする",
+          "type": "boolean",
+          "description": "無効なら、このルールまたは障害設定を適用しません。通常生成との比較に使用できます。"
+        },
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "異常を注入する項目名",
+          "type": "string",
+          "description": "生成するデータ項目の名前。正常行の生成後に変更するため、先行項目だけでなく任意の生成項目を指定できます。"
+        },
+        "operation": {
+          "default": "set",
+          "enum": [
+            "set",
+            "add",
+            "multiply",
+            "ramp",
+            "freeze",
+            "null",
+            "copy_from",
+            "timestamp_shift",
+            "omit"
+          ],
+          "title": "異常の作り方",
+          "type": "string",
+          "description": "set=値を置換、add=加算、multiply=倍率、ramp=開始位置から増加するドリフト、freeze=開始位置の値に固着、null=NULL、copy_from=指定位置の値をコピー、timestamp_shift=秒単位の時刻ずらし、omit=項目自体を欠落。"
+        },
+        "value": {
+          "default": null,
+          "title": "置換値 / 増分 / 倍率 / 秒数 JSON",
+          "description": "setの値、add/rampの増分、multiplyの倍率、timestamp_shiftの秒数、copy_fromの実行内コピー元位置（0始まり）を指定。$parameter参照も可能。freeze/null/omitでは使いません。"
+        },
+        "from_row": {
+          "default": 0,
+          "maximum": 100000000,
+          "minimum": 0,
+          "title": "異常の開始位置（0始まり）",
+          "type": "integer",
+          "description": "この実行内のレコード位置。20なら21件目から適用。start_sequenceとは別で、分割実行時は実行内の位置として評価します。"
+        },
+        "to_row": {
+          "anyOf": [
+            {
+              "maximum": 100000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "異常の終了位置（含む）",
+          "description": "空欄は最後まで。例: from_row=20、to_row=29なら10件の異常期間です。"
+        },
+        "every": {
+          "default": 1,
+          "maximum": 100000000,
+          "minimum": 1,
+          "title": "何件ごとに異常を適用するか",
+          "type": "integer",
+          "description": "開始位置から何件ごとに適用するか。1は全件、10は10件ごと。probabilityと組み合わせて断続的な異常を作ります。"
+        },
+        "probability": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "異常が発生する確率",
+          "type": "number",
+          "description": "適用位置・条件を満たした行に対する0〜1の確率。同じrun_keyとseedなら再現可能です。"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Predicate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "異常を適用する条件",
+          "description": "生成後の値を比較し、一致する場合だけ異常を適用します。先に適用した異常の結果も参照できます。then_valueの指定は不要です。"
+        },
+        "bypass_validation": {
+          "default": false,
+          "title": "型・必須検証を意図的に外す",
+          "type": "boolean",
+          "description": "数値欄へ文字列、主キーへNULL等の不正値を作る場合に有効化。送信JSONは構文上有効のままですが、DBや受信側は拒否し得ます。omitはこの設定に関係なく項目を欠落させます。"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "AnomalyRule",
+      "type": "object"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "比較する先行項目",
+          "type": "string",
+          "description": "すでに生成された項目名。例: status。"
+        },
+        "operator": {
+          "default": "eq",
+          "enum": [
+            "eq",
+            "ne",
+            "gt",
+            "ge",
+            "lt",
+            "le",
+            "in"
+          ],
+          "title": "比較方法",
+          "type": "string",
+          "description": "eq=等しい、ne=異なる、gt/ge=超える/以上、lt/le=未満/以下、in=比較値の配列に含まれる。"
+        },
+        "value": {
+          "default": null,
+          "title": "固定値 / 比較値 JSON",
+          "description": "文字列は\"sample\"、数値は123、真偽値はtrue、空値はnull。\"$parameter\"で共有値を参照できます。"
+        },
+        "then_value": {
+          "default": null,
+          "title": "一致したときの値 JSON",
+          "description": "条件が真の場合に上書きする値。\"$parameter\"の参照も可能です。"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "Condition",
+      "type": "object"
+    },
+    "FaultOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "異常注入を有効にする",
+          "type": "boolean",
+          "description": "無効なら、このルールまたは障害設定を適用しません。通常生成との比較に使用できます。"
+        },
+        "stage": {
+          "default": "before_batch",
+          "enum": [
+            "before_batch",
+            "after_write"
+          ],
+          "title": "障害を注入する段階",
+          "type": "string",
+          "description": "before_batch: SQL/ファイルは処理前、ストリームはoutbox記録後の送信前。after_write: SQLはCOMMIT前、ファイルはマニフェスト前、ストリームは送信ACK後の配送済み記録前。"
+        },
+        "action": {
+          "default": "none",
+          "enum": [
+            "none",
+            "fail",
+            "delay"
+          ],
+          "title": "障害の動作",
+          "type": "string",
+          "description": "none=処理障害なし（不正ファイル指定だけ使う場合等）、fail=意図的な例外で停止、delay=指定時間だけ待機。ストリームの再試行を指定するとfailを再試行でき、ACK消失時には重複送信し得ます。"
+        },
+        "from_batch": {
+          "default": 1,
+          "maximum": 100000000,
+          "minimum": 1,
+          "title": "障害の開始バッチ（1始まり）",
+          "type": "integer",
+          "description": "2なら2バッチ目から注入。バッチ件数を小さくすると、正常分を先に配送・確定してから障害を発生させられます。"
+        },
+        "every_batches": {
+          "default": 1,
+          "maximum": 100000000,
+          "minimum": 1,
+          "title": "何バッチごとに障害を発生させるか",
+          "type": "integer",
+          "description": "1は毎バッチ、5は開始バッチから5バッチごと。最大回数と組み合わせて一過性・継続障害を作れます。"
+        },
+        "max_occurrences": {
+          "default": 1,
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "障害の最大回数",
+          "type": "integer",
+          "description": "1は1回だけ。0は回数制限なし。再試行時も回数に含みます。永続的な障害は0、一過性の障害は1等を指定。"
+        },
+        "delay_ms": {
+          "default": 1000,
+          "maximum": 60000,
+          "minimum": 0,
+          "title": "模擬遅延 ms",
+          "type": "integer",
+          "description": "action=delayの待機時間。実行時間の上限と停止要求を確認しながら待機します。実際の接続先を遅くする設定ではありません。"
+        },
+        "artifact_mode": {
+          "default": "none",
+          "enum": [
+            "none",
+            "truncate_json",
+            "invalid_json_utf8",
+            "csv_header_mismatch",
+            "truncate_image",
+            "wrong_image_extension",
+            "manifest_checksum_mismatch"
+          ],
+          "title": "意図的に不正なファイルを作る",
+          "type": "string",
+          "description": "ファイルツール専用。JSON切断 / 不正UTF-8 / CSVヘッダー不一致 / 画像切断 / 拡張子不一致 / マニフェストSHA256不一致。取り込み側の検知・隔離を試験します。"
+        }
+      },
+      "title": "FaultOptions",
+      "type": "object"
+    },
+    "FieldRule": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "項目名",
+          "type": "string",
+          "description": "英字または下線で始まる英数字・下線、63文字まで。SQLの列名・CSVヘッダー・JSONキーになります。項目間参照にもこの名前を使います。"
+        },
+        "data_type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "decimal",
+            "boolean",
+            "datetime",
+            "json"
+          ],
+          "title": "値の型",
+          "type": "string",
+          "description": "string / integer / number / decimal / boolean / datetime / json。decimalは正確な小数文字列、日時はUTC ISO形式。SQL保存時は対応する列の型に変換します。"
+        },
+        "generator": {
+          "default": "constant",
+          "enum": [
+            "record_id",
+            "uuid",
+            "sequence",
+            "integer",
+            "uniform",
+            "normal",
+            "choice",
+            "boolean",
+            "constant",
+            "template",
+            "timestamp",
+            "reference",
+            "sum",
+            "difference",
+            "product",
+            "ratio"
+          ],
+          "title": "生成ルール",
+          "type": "string",
+          "description": "record_id=再現可能なキー、uuid=UUID、sequence=連番、integer/uniform/normal=分布、choice=重み付き選択、boolean=確率、constant=固定、template=書式、timestamp=時刻、reference/四則演算=先行項目から派生。"
+        },
+        "primary_key": {
+          "default": false,
+          "title": "SQL 主キー",
+          "type": "boolean",
+          "description": "テーブル作成時の主キー定義。upsert / update / deleteには接続先と一致する主キーが必要です。複数の項目を指定すると複合キーになります。"
+        },
+        "length": {
+          "default": 255,
+          "maximum": 4000,
+          "minimum": 1,
+          "title": "文字数の上限",
+          "type": "integer",
+          "description": "stringの最大文字数。生成結果を検証し、新規SQLテーブルの列長にも使用します。1〜4000。"
+        },
+        "precision": {
+          "default": 18,
+          "maximum": 38,
+          "minimum": 1,
+          "title": "小数の精度",
+          "type": "integer",
+          "description": "decimal全体の桁数。1〜38。SQLのNUMERIC(precision,scale)に対応します。"
+        },
+        "scale": {
+          "default": 3,
+          "maximum": 18,
+          "minimum": 0,
+          "title": "小数桁数 / 丸め桁数",
+          "type": "integer",
+          "description": "decimalの小数桁数、numberの丸め桁数。decimalでは精度以下に指定します。"
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "title": "最小値 / パラメーター参照",
+          "description": "integer / uniformの最小値。数値または$countのような共有パラメーター参照。"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 100,
+          "title": "最大値 / パラメーター参照",
+          "description": "integer / uniformの最大値。integerは両端を含みます。数値または$parameter。"
+        },
+        "mean": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 50,
+          "title": "平均",
+          "description": "正規分布normalの平均値。例: 50、または$value_mean。"
+        },
+        "stddev": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 5,
+          "title": "標準偏差",
+          "description": "normalのばらつき。0なら常に平均値。0以上、または共有パラメーター参照。"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "title": "開始値 / 開始日時",
+          "description": "sequenceでは数値、timestampではタイムゾーン付きISO日時。例: 2026-11-13T09:00:00+09:00。$start_timeで参照も可能。"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 1,
+          "title": "増分 / 秒間隔",
+          "description": "sequenceは開始値に足す量、timestampは時刻を進める秒数。小数・負数・$parameterも指定できます。"
+        },
+        "group_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 1,
+          "title": "同じ連番値を使う件数",
+          "description": "sequence / timestampの増分を適用する前にまとめる件数。10なら0〜9番が同じ時刻・連番値になります。1以上または$parameter。"
+        },
+        "modulo": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "title": "連番値の繰り返し周期",
+          "description": "0は繰り返さない。10なら連番のインデックスが0〜9を繰り返します。sequence / timestampに適用。"
+        },
+        "probability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": 0.5,
+          "title": "true の確率",
+          "description": "boolean生成器のtrueの割合。0〜1、または$parameter。例: 0.02。"
+        },
+        "choices": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "選択肢 JSON / 参照",
+          "description": "例: [\"ok\",\"warning\",\"ng\"]、または\"$statuses\"。型はデータ型と合わせてください。"
+        },
+        "weights": {
+          "items": {
+            "type": "number"
+          },
+          "title": "選択肢の重み JSON",
+          "type": "array",
+          "description": "例: [95,4,1]。選択肢と同じ個数で、0以上かつ合計が正。空の配列[]なら均等に選びます。"
+        },
+        "value": {
+          "default": null,
+          "title": "固定値 / 比較値 JSON",
+          "description": "文字列は\"sample\"、数値は123、真偽値はtrue、空値はnull。\"$parameter\"で共有値を参照できます。"
+        },
+        "template": {
+          "default": "{sequence}",
+          "maxLength": 2048,
+          "title": "文字列テンプレート",
+          "type": "string",
+          "description": "例: DEV-{entity_no:05d}。先行項目、共有パラメーター、{sequence}、{record_id}を参照できます。属性アクセスや任意コードは実行しません。"
+        },
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "参照元の項目名 JSON",
+          "type": "array",
+          "description": "例: [\"amount\",\"unit_price\"]。referenceは先頭、sum / difference / product / ratioは指定した先行項目を使用します。ratioは2項目で分母0不可。"
+        },
+        "null_probability": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "NULL の確率",
+          "type": "number",
+          "description": "生成結果をNULLに置き換える確率。0〜1。SQL主キーには指定できません。"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "条件による値の上書き",
+          "description": "有効にすると先行項目と比較し、一致する場合にthen_valueを採用。条件不一致時は通常の生成値を使用します。"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "FieldRule",
+      "type": "object"
+    },
+    "FileOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "formats": {
+          "items": {
+            "enum": [
+              "json",
+              "csv",
+              "image"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "出力形式 JSON",
+          "type": "array",
+          "description": "[\"json\",\"csv\",\"image\"]から1つ以上。画像だけ、JSONとCSVだけ、など自由に組み合わせられます。"
+        },
+        "records_per_file": {
+          "default": 100,
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "ファイルあたりの件数",
+          "type": "integer",
+          "description": "JSON配列 / JSONL / CSVを分割する最大件数。objectモードは常に1レコード1ファイル。メモリ上限のため小さくなる場合があります。"
+        },
+        "path_template": {
+          "default": "{run_key}/{job_id}",
+          "maxLength": 512,
+          "title": "出力サブディレクトリ",
+          "type": "string",
+          "description": "例: {run_key}/{job_id}。共有パラメーターも使用可能。相対パスのみ、..は禁止。job_idを含めると再実行時の衝突を避けられます。"
+        },
+        "filename_template": {
+          "default": "{sequence:010d}-{record_id}",
+          "maxLength": 256,
+          "title": "ファイル名テンプレート",
+          "type": "string",
+          "description": "例: {sequence:010d}-{record_id}。拡張子は自動付加。バッチ先頭の項目・共有値・run_key・job_idを参照可能。重複名はエラーになるので連番等を含めます。"
+        },
+        "json_mode": {
+          "default": "array",
+          "enum": [
+            "array",
+            "object",
+            "jsonl"
+          ],
+          "title": "JSON の格納形式",
+          "type": "string",
+          "description": "array=配列、object=1レコード1ファイル、jsonl=1行1レコード。"
+        },
+        "json_pretty": {
+          "default": false,
+          "title": "JSON の整形",
+          "type": "boolean",
+          "description": "array / objectを字下げして見やすくします。JSONLでは無効。ファイルサイズが増えます。"
+        },
+        "json_template": {
+          "default": null,
+          "title": "JSON 構造テンプレート",
+          "description": "nullなら生成行をそのまま出力。例: {\"device\":\"$row.entity_id\",\"metrics\":{\"value\":\"$row.value\"},\"key\":\"$meta.record_key\"}。$parameters.xも利用可能。"
+        },
+        "compression": {
+          "default": "none",
+          "enum": [
+            "none",
+            "gzip"
+          ],
+          "title": "JSON / CSV 圧縮",
+          "type": "string",
+          "description": "noneまたはgzip。gzip時は.json.gz / .csv.gz等になり、画像・sidecar・manifestは圧縮しません。"
+        },
+        "csv_delimiter": {
+          "default": ",",
+          "maxLength": 1,
+          "minLength": 1,
+          "title": "CSV 区切り文字",
+          "type": "string",
+          "description": "1文字。例: , または ;。タブ区切りはJSON編集で\\tを指定できます。"
+        },
+        "csv_quotechar": {
+          "default": "\"",
+          "maxLength": 1,
+          "minLength": 1,
+          "title": "CSV 引用文字",
+          "type": "string",
+          "description": "通常は二重引用符。1文字で指定します。区切り・改行を含む値はCSVライターが処理します。"
+        },
+        "csv_quoting": {
+          "default": "minimal",
+          "enum": [
+            "minimal",
+            "all",
+            "nonnumeric"
+          ],
+          "title": "CSV 引用規則",
+          "type": "string",
+          "description": "minimal=必要なセル、all=全セル、nonnumeric=文字列セルを引用します。"
+        },
+        "csv_header": {
+          "default": true,
+          "title": "CSV ヘッダー行",
+          "type": "boolean",
+          "description": "有効なら最初に項目名を書き込みます。列順はデータ項目の順序です。"
+        },
+        "csv_null_value": {
+          "default": "",
+          "maxLength": 255,
+          "title": "CSV のNULL表現",
+          "type": "string",
+          "description": "空文字が既定。例: NULL、\\N。JSON値はJSON文字列としてセルへ保存します。"
+        },
+        "csv_newline": {
+          "default": "LF",
+          "enum": [
+            "LF",
+            "CRLF"
+          ],
+          "title": "CSV 改行コード",
+          "type": "string",
+          "description": "LFまたはCRLF。読み込み先の仕様に合わせて指定します。"
+        },
+        "csv_encoding": {
+          "default": "utf-8-sig",
+          "enum": [
+            "utf-8",
+            "utf-8-sig"
+          ],
+          "title": "CSV 文字コード",
+          "type": "string",
+          "description": "utf-8-sigはBOM付きUTF-8でExcel等向け。utf-8はBOMなし。"
+        },
+        "write_sidecars": {
+          "default": true,
+          "title": "画像のメタデータ保存",
+          "type": "boolean",
+          "description": "画像ごとの.meta.jsonにレコード・record_key・疑似欠陥ラベルを保存。画像は実物の検査写真ではなく人工パターンです。"
+        },
+        "write_manifest": {
+          "default": true,
+          "title": "完了マニフェスト保存",
+          "type": "boolean",
+          "description": "各バッチの全ファイル保存後に.ready.jsonを最後に作成します。下流はこれを取り込みの目印にできます。SHA256とサイズを記録します。"
+        },
+        "image": {
+          "$ref": "#/$defs/ImageOptions",
+          "title": "疑似検査画像の条件",
+          "description": "格子・グラデーション・ドットの人工画像を再現可能に生成します。外部画像検索やAI APIは使用しません。"
+        }
+      },
+      "title": "FileOptions",
+      "type": "object"
+    },
+    "ImageOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "default": 320,
+          "maximum": 4096,
+          "minimum": 32,
+          "title": "画像の幅 px",
+          "type": "integer",
+          "description": "32〜4096ピクセル。大きな画像とノイズは生成負荷が増えます。"
+        },
+        "height": {
+          "default": 240,
+          "maximum": 4096,
+          "minimum": 32,
+          "title": "画像の高さ px",
+          "type": "integer",
+          "description": "32〜4096ピクセル。出力容量と生成速度に影響します。"
+        },
+        "format": {
+          "default": "png",
+          "enum": [
+            "png",
+            "jpeg"
+          ],
+          "title": "画像形式",
+          "type": "string",
+          "description": "png=可逆圧縮、jpeg=非可逆圧縮。JSON / CSVと同じrecord_keyで対応付けます。"
+        },
+        "pattern": {
+          "default": "grid",
+          "enum": [
+            "grid",
+            "gradient",
+            "dots"
+          ],
+          "title": "人工画像パターン",
+          "type": "string",
+          "description": "grid=格子、gradient=色の傾斜、dots=点群。背景色と前景色を変更できます。"
+        },
+        "noise": {
+          "default": 0,
+          "maximum": 64,
+          "minimum": 0,
+          "title": "画素ノイズ強度",
+          "type": "integer",
+          "description": "0はなし、1〜64は各RGB成分に加える最大ゆらぎ。CPU負荷が高くなるため小さい値から試します。"
+        },
+        "defect_probability": {
+          "default": 0.05,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "疑似欠陥の確率",
+          "type": "number",
+          "description": "0〜1。選ばれた画像に傷状の線を描き、sidecarにsynthetic_defectを記録します。"
+        },
+        "every": {
+          "default": 1,
+          "maximum": 1000000,
+          "minimum": 1,
+          "title": "画像生成の間引き",
+          "type": "integer",
+          "description": "1は全レコード、10はシーケンス番号が10の倍数のときのみ生成。大量の表データと少数画像を組み合わせられます。"
+        },
+        "quality": {
+          "default": 90,
+          "maximum": 100,
+          "minimum": 10,
+          "title": "JPEG 品質",
+          "type": "integer",
+          "description": "10〜100。PNGでは品質設定の効果はありません。"
+        },
+        "background": {
+          "default": "#182a3a",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "背景色",
+          "type": "string",
+          "description": "#RRGGBB形式。例: #182a3a。"
+        },
+        "foreground": {
+          "default": "#55a69b",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "パターン色",
+          "type": "string",
+          "description": "格子・点・グラデーション終端の#RRGGBB色。"
+        },
+        "defect_color": {
+          "default": "#ef463c",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "title": "疑似欠陥の色",
+          "type": "string",
+          "description": "傷状の線に使う#RRGGBB色。"
+        }
+      },
+      "title": "ImageOptions",
+      "type": "object"
+    },
+    "Predicate": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "比較する先行項目",
+          "type": "string",
+          "description": "すでに生成された項目名。例: status。"
+        },
+        "operator": {
+          "default": "eq",
+          "enum": [
+            "eq",
+            "ne",
+            "gt",
+            "ge",
+            "lt",
+            "le",
+            "in"
+          ],
+          "title": "比較方法",
+          "type": "string",
+          "description": "eq=等しい、ne=異なる、gt/ge=超える/以上、lt/le=未満/以下、in=比較値の配列に含まれる。"
+        },
+        "value": {
+          "default": null,
+          "title": "固定値 / 比較値 JSON",
+          "description": "文字列は\"sample\"、数値は123、真偽値はtrue、空値はnull。\"$parameter\"で共有値を参照できます。"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "Predicate",
+      "type": "object"
+    },
+    "SqlOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_name": {
+          "default": "",
+          "pattern": "^$|^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "スキーマ / 所有者",
+          "type": "string",
+          "description": "空欄はDBユーザーの既定スキーマ。SQL Serverは例: synthetic、Oracleは所有者名、PostgreSQLはpublic。MySQL / SQLiteでは通常空欄。スキーマ自体は自動作成しません。"
+        },
+        "table": {
+          "default": "sample_records",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "テーブル名",
+          "type": "string",
+          "description": "英数字と下線の識別子。既存テーブルを選ぶ場合、生成項目と列名・型を合わせます。未作成ならDDLを確認して作成できます。"
+        },
+        "operation": {
+          "default": "upsert",
+          "enum": [
+            "insert",
+            "upsert",
+            "update",
+            "delete"
+          ],
+          "title": "SQL 操作",
+          "type": "string",
+          "description": "insert=追加のみ、upsert=主キーで追加/更新、update=既存行更新、delete=主キー一致行削除。DDLやDROPは実行しません。同時に同じ主キーへ書く別アプリがある場合は競合し得ます。"
+        }
+      },
+      "title": "SqlOptions",
+      "type": "object"
+    },
+    "StreamOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "envelope": {
+          "default": true,
+          "title": "配送メタデータを追加",
+          "type": "boolean",
+          "description": "JSONオブジェクトにrecord_key / run_key / sequenceを追加。重複排除や追跡に推奨。本文が配列やスカラーの場合は無効にします。"
+        },
+        "metadata_key": {
+          "default": "_source",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "メタデータの項目名",
+          "type": "string",
+          "description": "既定は_source。生成項目や本文テンプレートのキーと重複させないでください。"
+        },
+        "http_body": {
+          "default": "array",
+          "enum": [
+            "array",
+            "single",
+            "ndjson"
+          ],
+          "title": "HTTP 本文単位",
+          "type": "string",
+          "description": "array=バッチをJSON配列、single=1件ずつ、ndjson=改行区切りJSON。MQTTは常に1イベント1メッセージです。"
+        },
+        "topic_template": {
+          "default": "",
+          "maxLength": 512,
+          "title": "配送先名のテンプレート",
+          "type": "string",
+          "description": "空欄は接続プロファイルの配送先名。MQTT / Kafka / NATS / AMQPのトピック・subject・routing keyを項目ごとに変えられます。例: data.{entity_id}。各プロトコルの命名規則に合わせます。"
+        },
+        "payload_template": {
+          "default": null,
+          "title": "送信本文のJSON構造",
+          "description": "nullなら生成行。例: {\"device\":\"$row.entity_id\",\"values\":[\"$row.value\"],\"source\":\"$parameters.site\"}。配列やスカラーならメタデータ追加を無効にします。"
+        },
+        "delivery_attempts": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "1バッチの送信試行数",
+          "description": "1〜10回。失敗したバッチは永続outboxに残ります。受信済みでも応答が失われた場合は重複し得るためrecord_keyを使います。"
+        },
+        "retry_backoff_ms": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "再試行の基準待機 ms",
+          "description": "同一バッチの再試行間隔。試行ごとに2倍、最大60秒。0は待機なし。"
+        }
+      },
+      "title": "StreamOptions",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 2,
+      "default": 2,
+      "title": "設定バージョン",
+      "type": "integer",
+      "description": "このアプリはバージョン2のプリセットJSONを使用します。"
+    },
+    "name": {
+      "default": "カスタムデータ",
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "表示名",
+      "type": "string",
+      "description": "一覧と実行履歴に表示する名前。業種や工場の種類を指定する必要はありません。"
+    },
+    "description": {
+      "default": "",
+      "maxLength": 1000,
+      "title": "用途・メモ",
+      "type": "string",
+      "description": "このプリセットの用途、変更した設定、実行前の条件を記録できます。選択欄にも表示します。接続先のパスワード等は記載せず、接続プロファイルへ保存してください。"
+    },
+    "connection_id": {
+      "default": "default",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "title": "接続プロファイル",
+      "type": "string",
+      "description": "この実行に使用する保存済みの接続先。プリセットにはIDだけが入ります。認証情報は接続プロファイル側で管理します。"
+    },
+    "connection_revision": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "接続リビジョン固定",
+      "description": "通常はnull。実行開始時に接続設定の版を固定するので、実行中の接続先変更に影響されません。指定すると過去の版を使用します。"
+    },
+    "run_key": {
+      "default": "trial-001",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "title": "実行キー",
+      "type": "string",
+      "description": "再現性と重複判定の単位。英数字・ハイフン・下線。seedとシーケンスが同じなら同じrecord_idになります。別のデータ系列には別のキーを指定します。"
+    },
+    "seed": {
+      "default": 42,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "乱数シード",
+      "type": "integer",
+      "description": "同じ実行キー・シード・シーケンス・項目名なら同じ値。0〜2147483647。"
+    },
+    "rows": {
+      "default": 30,
+      "maximum": 100000000,
+      "minimum": 1,
+      "title": "生成レコード数",
+      "type": "integer",
+      "description": "1〜1億件。SQLは行数、ファイルはレコード数、ストリームはイベント数。画像は間引き設定により少なくなります。全件をメモリには保持しません。"
+    },
+    "target_rate": {
+      "default": 10,
+      "maximum": 1000000,
+      "minimum": 0,
+      "title": "目標レコード数 / 秒",
+      "type": "integer",
+      "description": "0は速度制限なし。バッチ単位で調整する目標値です。実際の速度はDB・ディスク・通信・生成条件で変わります。まず少量で測定してください。"
+    },
+    "batch_size": {
+      "default": 1000,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "バッチ件数",
+      "type": "integer",
+      "description": "1〜10000。SQLはトランザクション、ストリームは送信単位。ファイルはファイルあたり件数を使用。メモリ量やDBパラメーター上限に合わせて内部で縮小する場合があります。"
+    },
+    "start_sequence": {
+      "default": 0,
+      "maximum": 1000000000,
+      "minimum": 0,
+      "title": "開始シーケンス",
+      "type": "integer",
+      "description": "0から始まる連番。途中から再開したり、分割した負荷試験に使用します。run_key / seedも合わせると同じデータを再現できます。"
+    },
+    "max_duration_seconds": {
+      "default": 3600,
+      "maximum": 86400,
+      "minimum": 1,
+      "title": "実行時間の上限 秒",
+      "type": "integer",
+      "description": "この時間を超えると停止要求になります。進行中のDBトランザクションや通信の完了後に止まります。完了件数は履歴で確認できます。"
+    },
+    "max_output_mb": {
+      "default": 1024,
+      "maximum": 1048576,
+      "minimum": 1,
+      "title": "出力量の上限 MiB",
+      "type": "integer",
+      "description": "ファイルとストリーム本文の論理上限。SQLのDB容量上限ではありません。サーバー側のメモリ・空き容量保護も常時有効です。"
+    },
+    "initial_delay_seconds": {
+      "default": 0,
+      "maximum": 3600,
+      "minimum": 0,
+      "title": "開始前の待機 秒",
+      "type": "number",
+      "description": "実行開始後、生成を始めるまでの待機時間。複数のソースの開始時刻をずらせます。実行時間の上限にはこの待機も含まれます。"
+    },
+    "jitter_ms": {
+      "default": 0,
+      "maximum": 60000,
+      "minimum": 0,
+      "title": "送信間隔のゆらぎ ms",
+      "type": "integer",
+      "description": "速度調整の待機に0〜指定値の再現可能なゆらぎを加えます。目標速度が0の場合は適用しません。"
+    },
+    "burst_rows": {
+      "default": 0,
+      "maximum": 1000000,
+      "minimum": 0,
+      "title": "バーストのレコード数",
+      "type": "integer",
+      "description": "0は通常送信。例: 1000にすると1000件単位でバースト間待機を適用。バッチはこの値以下に調整します。"
+    },
+    "burst_pause_ms": {
+      "default": 0,
+      "maximum": 3600000,
+      "minimum": 0,
+      "title": "バースト間の待機 ms",
+      "type": "integer",
+      "description": "バーストの境界で加える待機。目標速度の制限と両方が適用されます。"
+    },
+    "parameters": {
+      "additionalProperties": true,
+      "maxProperties": 100,
+      "title": "共有パラメーター JSON",
+      "type": "object",
+      "description": "任意のキーとJSON値。例: {\"count\":100,\"states\":[\"ok\",\"ng\"]}。生成条件では$countや$statesで参照。テンプレートは{count}でも参照できます。"
+    },
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/FieldRule"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "title": "データ項目",
+      "type": "array",
+      "description": "上から順に生成します。項目名・型・生成器・詳細条件を自由に変更できます。他の項目を参照する場合は参照元を先に置きます。"
+    },
+    "sql": {
+      "$ref": "#/$defs/SqlOptions",
+      "title": "SQL 書き込み設定",
+      "description": "スキーマ・テーブル・操作を指定。データの列定義は共通のデータ項目から作成します。"
+    },
+    "files": {
+      "$ref": "#/$defs/FileOptions",
+      "title": "ファイル設定",
+      "description": "形式・分割・命名・JSON構造・CSV仕様・画像条件を設定します。既存ファイルは上書きしません。"
+    },
+    "stream": {
+      "$ref": "#/$defs/StreamOptions",
+      "title": "ストリーム設定",
+      "description": "メタデータの付加・本文形式・トピックを実行ごとに指定します。認証と配送方式は接続プロファイル側で管理します。"
+    },
+    "anomalies": {
+      "items": {
+        "$ref": "#/$defs/AnomalyRule"
+      },
+      "maxItems": 64,
+      "title": "データ異常の注入ルール",
+      "type": "array",
+      "description": "正常データを生成した後、指定した行位置・割合・条件で異常を注入します。複数ルールは上から順に適用。異常を含むプリセットは意図的にDB制約や受信検証で拒否される場合があります。"
+    },
+    "faults": {
+      "$ref": "#/$defs/FaultOptions",
+      "title": "処理障害・不正ファイルのシミュレーション",
+      "description": "この実行だけに障害を注入します。外部のサーバーやネットワーク設定は変更しません。SQLのロールバック、ファイル未完了、配送ACK消失、遅延等を再現できます。"
+    },
+    "task": {
+      "default": "generate",
+      "enum": [
+        "generate",
+        "retry"
+      ],
+      "title": "実行タスク",
+      "type": "string",
+      "description": "通常はgenerate。未配送の再送は履歴画面の操作から起動します。"
+    }
+  },
+  "title": "RunSpec",
+  "type": "object"
+}

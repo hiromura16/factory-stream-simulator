@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Data Source Studio</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <span class="eyebrow"
+          >DATA SOURCE STUDIO <span class="version">v0.2</span></span
+        >
+        <h1 id="title">データ生成スタジオ</h1>
+        <p id="subtitle">接続・データ定義・実行条件を、自分の仕様に。</p>
+      </div>
+      <span id="health" class="badge">接続中</span>
+    </header>
+    <div class="layout">
+      <aside>
+        <nav aria-label="メインメニュー">
+          <button class="nav active" data-tab="generate">
+            01 <span>データをつくる</span></button
+          ><button class="nav" data-tab="connections">
+            02 <span>接続先</span></button
+          ><button class="nav" data-tab="presets">
+            03 <span>プリセット / JSON</span></button
+          ><button class="nav" data-tab="history">
+            04 <span>実行履歴</span>
+          </button>
+        </nav>
+        <div class="aside-note">
+          <span class="eyebrow">CONTEXT HELP</span>
+          <p>
+            項目にマウスを重ねると、その場で説明を表示します。<b>?</b>
+            にキーボードで移動しても読めます。
+          </p>
+          <p id="contextHelp">設定値はプレビューで確認してから実行できます。</p>
+        </div>
+      </aside>
+      <main>
+        <div id="notice" role="status" aria-live="polite"></div>
+        <section id="generate" class="tab active">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">GENERATOR</span>
+              <h2>データをつくる</h2>
+            </div>
+            <span class="muted">業種を選ばず、項目から定義</span>
+          </div>
+          <div class="toolbar card">
+            <label
+              class="compact hint"
+              data-help="保存済みプリセットを読み込みます。画面の編集中の設定は置き換わります。"
+              >プリセット<select id="presetSelect"></select></label
+            ><button id="loadPreset">読み込む</button
+            ><button id="resetRun" class="ghost">初期値</button
+            ><button id="toPreset" class="ghost">この設定を保存…</button>
+          </div>
+          <p id="presetDetails" class="note" aria-live="polite"></p>
+          <form id="runForm" novalidate><div id="runEditor"></div></form>
+          <div class="actionbar">
+            <button
+              id="preview"
+              class="secondary"
+              data-help="正常位置と異常位置から最大12件を生成します。接続先への通信・書き込み・送信はありません。"
+            >
+              プレビュー</button
+            ><button
+              id="start"
+              class="primary"
+              data-help="現在の設定と接続プロファイルの版を固定して実行します。"
+            >
+              生成を開始</button
+            ><span class="muted">実行は各ツール1件ずつ</span>
+          </div>
+          <div id="sqlActions" class="toolbar card" hidden>
+            <button id="inspectTable">接続先の列を確認</button
+            ><button id="showDdl">作成DDLを表示</button
+            ><button
+              id="prepareTable"
+              data-help="この定義のテーブルが存在しない場合だけ作成します。既存テーブルの変更・削除は行いません。CREATE TABLE権限が必要です。"
+            >
+              未作成のテーブルを作成
+            </button>
+          </div>
+          <div id="previewPanel" class="card" hidden>
+            <h3>プレビュー <span class="badge">書き込みなし</span></h3>
+            <p id="previewNote"></p>
+            <div id="previewTable" class="table-scroll"></div>
+            <details>
+              <summary>出力JSON / 処理結果</summary>
+              <pre id="previewJson"></pre>
+            </details>
+          </div>
+          <div id="currentJob" class="card" hidden></div>
+        </section>
+        <section id="connections" class="tab">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">DESTINATIONS</span>
+              <h2>接続プロファイル</h2>
+            </div>
+            <button id="newConnection">＋ 新しい接続先</button>
+          </div>
+          <p class="intro">
+            接続先ごとに認証・通信条件を保存。実行プリセットとは分けて管理します。
+          </p>
+          <div id="connectionList" class="profile-list"></div>
+          <div class="card">
+            <div class="section-head">
+              <h3 id="connectionTitle">接続先の編集</h3>
+              <span class="badge">認証情報は暗号化保存</span>
+            </div>
+            <form id="connectionForm" novalidate></form>
+            <div class="actionbar">
+              <button id="saveConnection" class="primary">接続先を保存</button
+              ><button id="testConnection">保存済みの接続をテスト</button
+              ><button id="exportConnection" class="ghost">
+                認証情報なしで書き出す
+              </button>
+            </div>
+            <p id="secretState" class="muted"></p>
+          </div>
+          <details class="card">
+            <summary>証明書・鍵・接続設定ファイルを配置</summary>
+            <p class="muted">
+              ファイルはアプリのconnection-files領域へ権限600で保存します。内容は読み戻せません。同じ名前は更新します。秘密鍵を含む場合はこの永続ボリュームも保護してください。Walletは
+              oracle/tnsnames.ora、oracle/ewallet.pem
+              のように個別に配置できます。
+            </p>
+            <div class="grid">
+              <label
+                class="hint"
+                data-help="証明書PEM、known_hosts、Wallet、pg_service.conf、odbc.ini、Kerberos設定・チケットなどを選択します。1ファイル1MiBまで。"
+                >接続用ファイル <span class="help" tabindex="0">?</span
+                ><input id="connectionFile" type="file" /></label
+              ><label
+                class="hint"
+                data-help="connection-filesからの相対パス。例: ca.pem、oracle/tnsnames.ora、known_hosts。空欄は元のファイル名を使用します。"
+                >配置名 <span class="help" tabindex="0">?</span
+                ><input id="connectionFileName" placeholder="例: ca.pem"
+              /></label>
+            </div>
+            <div class="actionbar">
+              <button id="uploadConnectionFile">ファイルを配置</button
+              ><span id="connectionFileResult" class="muted"></span>
+            </div>
+          </details>
+          <div class="card note" id="destinationAdvice"></div>
+        </section>
+        <section id="presets" class="tab">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">REUSABLE CONFIGURATION</span>
+              <h2>プリセットをつくる</h2>
+            </div>
+            <button id="refreshJson" class="ghost">
+              画面の設定をJSONに反映
+            </button>
+          </div>
+          <div class="card">
+            <div class="grid">
+              <label
+                class="hint"
+                data-help="保存するプリセットのID。英数字・ハイフン・下線、64文字以内。同じIDで保存すると更新します。"
+                >プリセットID <span class="help" tabindex="0">?</span
+                ><input
+                  id="presetId"
+                  value="my-preset"
+                  pattern="[A-Za-z0-9_-]{1,64}" /></label
+              ><label
+                class="hint"
+                data-help="このJSONを別のアプリへ移す場合は、接続IDに対応する接続プロファイルを移動先でも設定してください。認証情報は含まれません。"
+                >JSONファイルから読み込む
+                <span class="help" tabindex="0">?</span
+                ><input
+                  id="importPreset"
+                  type="file"
+                  accept="application/json,.json"
+              /></label>
+            </div>
+            <label
+              class="hint"
+              data-help="実行条件・任意パラメーター・データ項目・出力条件を丸ごと編集できます。「JSONを画面に適用」で検証してフォームへ反映します。保存前にこの内容を検証します。"
+              >プリセットJSON <span class="help" tabindex="0">?</span
+              ><textarea
+                id="presetJson"
+                class="code"
+                spellcheck="false"
+                rows="24"
+              ></textarea>
+            </label>
+            <div class="actionbar">
+              <button id="applyJson">JSONを画面に適用</button
+              ><button id="savePreset" class="primary">
+                JSONをプリセットとして保存</button
+              ><button id="exportPreset">JSONを書き出す</button>
+            </div>
+            <p class="muted">
+              接続先のIDを参照します。パスワードやトークンは接続先画面で設定してください。
+            </p>
+          </div>
+        </section>
+        <section id="history" class="tab">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">RUN HISTORY</span>
+              <h2>実行履歴</h2>
+            </div>
+            <button id="refreshHistory">更新</button>
+          </div>
+          <div id="outboxPanel" class="card" hidden>
+            <h3>永続 outbox</h3>
+            <pre id="outboxSummary"></pre>
+            <div class="toolbar">
+              <label>接続先<select id="retryConnection"></select></label
+              ><label
+                class="hint"
+                data-help="この接続先の未配送データだけを再送します。上限1〜1000000件。初回送信時の本文形式とrecord_keyを維持します。"
+                >再送上限件数<input
+                  id="retryLimit"
+                  type="number"
+                  value="1000"
+                  min="1"
+                  max="1000000" /></label
+              ><button id="retryOutbox">未配送分を再送</button>
+            </div>
+            <p class="muted">
+              応答が失われた際は重複し得ます。受信側でrecord_keyによる重複排除を行ってください。
+            </p>
+          </div>
+          <div id="historyList"></div>
+        </section>
+      </main>
+    </div>
+    <div id="tooltip" role="tooltip" hidden></div>
+    <footer>
+      設定はアプリの永続ボリュームに保存されます。生成速度は目標値です。
+    </footer>
+  </body>
+</html>

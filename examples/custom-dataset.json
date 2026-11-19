@@ -1,0 +1,141 @@
+{
+  "version": 2,
+  "name": "任意項目の例",
+  "connection_id": "default",
+  "connection_revision": null,
+  "run_key": "trial-001",
+  "seed": 42,
+  "rows": 30,
+  "target_rate": 10,
+  "batch_size": 10,
+  "start_sequence": 0,
+  "max_duration_seconds": 7200,
+  "max_output_mb": 4096,
+  "initial_delay_seconds": 0.0,
+  "jitter_ms": 0,
+  "burst_rows": 0,
+  "burst_pause_ms": 0,
+  "parameters": {
+    "source_count": 20,
+    "states": [
+      "ok",
+      "warning",
+      "stopped"
+    ],
+    "site": "lab",
+    "start_time": "2026-11-13T00:00:00+09:00"
+  },
+  "fields": [
+    {
+      "name": "id",
+      "generator": "record_id",
+      "primary_key": true,
+      "length": 64
+    },
+    {
+      "name": "source_no",
+      "data_type": "integer",
+      "generator": "integer",
+      "minimum": 1,
+      "maximum": "$source_count"
+    },
+    {
+      "name": "source_id",
+      "generator": "template",
+      "template": "SRC-{source_no:04d}"
+    },
+    {
+      "name": "status",
+      "generator": "choice",
+      "choices": "$states",
+      "weights": [
+        95,
+        4,
+        1
+      ]
+    },
+    {
+      "name": "temperature",
+      "data_type": "number",
+      "generator": "normal",
+      "mean": 50,
+      "stddev": 3
+    },
+    {
+      "name": "alert",
+      "data_type": "boolean",
+      "generator": "boolean",
+      "probability": 0.01,
+      "condition": {
+        "field": "status",
+        "operator": "eq",
+        "value": "stopped",
+        "then_value": true
+      }
+    },
+    {
+      "name": "at",
+      "data_type": "datetime",
+      "generator": "timestamp",
+      "start": "$start_time",
+      "step": 0.1
+    }
+  ],
+  "sql": {
+    "schema_name": "",
+    "table": "sample_records",
+    "operation": "upsert"
+  },
+  "files": {
+    "formats": [
+      "json",
+      "csv",
+      "image"
+    ],
+    "records_per_file": 100,
+    "path_template": "{run_key}/{job_id}",
+    "filename_template": "{sequence:010d}-{record_id}",
+    "json_mode": "array",
+    "json_pretty": false,
+    "json_template": null,
+    "compression": "none",
+    "csv_delimiter": ",",
+    "csv_quotechar": "\"",
+    "csv_quoting": "minimal",
+    "csv_header": true,
+    "csv_null_value": "",
+    "csv_newline": "LF",
+    "csv_encoding": "utf-8-sig",
+    "write_sidecars": true,
+    "write_manifest": true,
+    "image": {
+      "width": 320,
+      "height": 240,
+      "format": "png",
+      "pattern": "grid",
+      "noise": 0,
+      "defect_probability": 0.05,
+      "every": 1,
+      "quality": 90,
+      "background": "#182a3a",
+      "foreground": "#55a69b",
+      "defect_color": "#ef463c"
+    }
+  },
+  "stream": {
+    "envelope": true,
+    "metadata_key": "_source",
+    "http_body": "array",
+    "topic_template": "data/{source_id}/events",
+    "payload_template": {
+      "source": "$row.source_id",
+      "metrics": {
+        "temperature": "$row.temperature"
+      },
+      "status": "$row.status",
+      "alert": "$row.alert",
+      "site": "$parameters.site"
+    }
+  },
+  "task": "generate"
+}

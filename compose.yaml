@@ -1,0 +1,119 @@
+{
+  "services": {
+    "app": {
+      "build": {
+        "context": "."
+      },
+      "image": "factory-stream-simulator:local",
+      "restart": "unless-stopped",
+      "read_only": true,
+      "tmpfs": [
+        "/tmp:size=64m"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "mem_limit": "${APP_MEMORY:-512m}",
+      "cpus": "${APP_CPUS:-1.0}",
+      "pids_limit": 128,
+      "stop_grace_period": "90s",
+      "ports": [
+        "${BIND_IP:-127.0.0.1}:${APP_PORT}:8080"
+      ],
+      "environment": {
+        "TZ": "Asia/Tokyo",
+        "DATA_DIR": "/data",
+        "MIN_AVAILABLE_GIB": "${MIN_AVAILABLE_GIB:-6}",
+        "MQTT_HOST": "${MQTT_HOST:-mqtt}",
+        "MQTT_PORT": "${MQTT_PORT:-1883}",
+        "MQTT_USERNAME": "factory",
+        "MQTT_PASSWORD_FILE": "/run/secrets/mqtt-password",
+        "MQTT_TOPIC": "${MQTT_TOPIC:-factory/F01/telemetry}",
+        "MQTT_TLS": "${MQTT_TLS:-false}",
+        "MAX_SPOOL_MB": "${MAX_SPOOL_MB:-16384}",
+        "CONNECTION_FILES_DIR": "/data/connection-files"
+      },
+      "volumes": [
+        "app-data:/data",
+        "${MQTT_PASSWORD_FILE:?Set MQTT_PASSWORD_FILE}:/run/secrets/mqtt-password:ro"
+      ],
+      "labels": [
+        "app.owner=factory-sources-v1",
+        "app.component=factory-stream-simulator",
+        "traefik.enable=false",
+        "${FACTORY_GUARD_LABEL_PREFIX:-factory}.guard.managed=true",
+        "lab.role=heavy",
+        "lab.stop_priority=70"
+      ],
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "depends_on": {
+        "mqtt": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "mqtt": {
+      "image": "eclipse-mosquitto:2.0.22",
+      "user": "1000:1000",
+      "restart": "unless-stopped",
+      "read_only": true,
+      "tmpfs": [
+        "/tmp:size=16m"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "mem_limit": "128m",
+      "cpus": 0.25,
+      "ports": [
+        "${BIND_IP:-127.0.0.1}:${MQTT_PUBLISHED_PORT:-3563}:1883"
+      ],
+      "volumes": [
+        "./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro",
+        "${MQTT_DATA_DIR:?Set MQTT_DATA_DIR}:/mosquitto/data",
+        "${MQTT_PASSWORD_FILE:?Set MQTT_PASSWORD_FILE}:/run/secrets/mqtt-password:ro"
+      ],
+      "command": [
+        "sh",
+        "-c",
+        "mosquitto_passwd -b -c /mosquitto/data/passwords factory \"$$(cat /run/secrets/mqtt-password)\" && exec mosquitto -c /mosquitto/config/mosquitto.conf"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "mosquitto_pub -h 127.0.0.1 -p 1883 -u factory -P \"$$(cat /run/secrets/mqtt-password)\" -t internal/health -m ok -q 1"
+        ],
+        "interval": "15s",
+        "timeout": "5s",
+        "retries": 5
+      },
+      "labels": {
+        "app.owner": "factory-sources-v1",
+        "app.component": "mqtt",
+        "traefik.enable": "false"
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    }
+  },
+  "volumes": {
+    "app-data": {}
+  }
+}

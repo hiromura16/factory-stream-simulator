@@ -1,0 +1,62 @@
+{
+  "version": "0.2.0",
+  "validated_on": "2026-11-14",
+  "preset_contract": 2,
+  "presets_per_app": 48,
+  "normal_presets": 24,
+  "anomaly_presets": 24,
+  "inline_help": "hover and keyboard focus",
+  "preset_descriptions": [
+    "assumptions",
+    "generated behavior",
+    "verification points",
+    "prerequisites"
+  ],
+  "source_specific_notes": "Unconfigured enterprise authentication and NFS need environment-specific acceptance; see README.",
+  "profiles_and_presets_persist_across_redeployment": true,
+  "credentials_exported": false,
+  "source_credential_scan": "clean",
+  "host_test_fixtures": "stopped after acceptance",
+  "app": "stream",
+  "unit_tests": {
+    "passed": 21,
+    "skipped_external_fixture_tests": 1
+  },
+  "validation": {
+    "transports_actually_verified": [
+      "MQTT / Mosquitto",
+      "HTTP authenticated API",
+      "Kafka-compatible / Redpanda",
+      "AMQP 0-9-1 / RabbitMQ",
+      "NATS JetStream",
+      "WebSocket with JSON ACK",
+      "local capture"
+    ],
+    "live_mqtt_events_received": 5000,
+    "outbox": "persistent, destination-bound, replay preserves queued order",
+    "ack_loss_acceptance": {
+      "unique_record_keys": 20,
+      "total_received_after_retry": 30,
+      "duplicated_keys": 10
+    },
+    "transient_fault_acceptance": "automatic retry delivers all 30 events after one injected failure"
+  },
+  "additional_source_proposal": "docs/source-roadmap.md",
+  "presets_total_across_apps": 144,
+  "browser_acceptance": "hover/focus help, connection selection, detailed descriptions, anomaly preview/editor, mobile viewport",
+  "published_json_schema": "matches anomaly/fault contracts",
+  "admin_login_required": false,
+  "login_removal_acceptance": {
+    "ui_api_metrics": "no login",
+    "preview_without_credentials": "passed",
+    "cross_origin_mutation_blocked": "passed",
+    "hosts": [
+      "localhost",
+      "LAN",
+      "Tailscale"
+    ],
+    "browser_without_credentials": "passed",
+    "preview": "passed"
+  },
+  "evidence_scope": "Historical acceptance record from the stated validation date; not rerun or newly certified by the sanitized sample publication. Revalidate in the intended deployment environment."
+}

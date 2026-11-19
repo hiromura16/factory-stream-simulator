@@ -1,0 +1,765 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "title": "接続ID",
+      "type": "string",
+      "description": "英数字・ハイフン・下線で指定する保存用ID。同じIDで保存すると更新します。例: test-oracle"
+    },
+    "name": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "表示名",
+      "type": "string",
+      "description": "一覧と実行履歴に表示する名前。業種や工場の種類を指定する必要はありません。"
+    },
+    "kind": {
+      "enum": [
+        "amqp",
+        "capture",
+        "http",
+        "kafka",
+        "mqtt",
+        "nats",
+        "websocket"
+      ],
+      "title": "接続方式",
+      "type": "string",
+      "description": "AMQP 0-9-1（RabbitMQ等）: RabbitMQ等のexchange / routing keyへ永続メッセージを送信し、publisher confirmを待ちます。virtual hostと認証を設定。exchangeを空欄にするとrouting keyはキュー名です。キュー作成は明示的に有効化した場合のみ行います。\n\nキャプチャ（外部送信なし）: 生成したJSONをアプリの永続SQLite outboxへ記録します。ネットワークへ送信せず、生成条件・データ形式の確認用です。pendingは未配送ではなく保存のみという想定動作です。同じプロファイルを送信方式へ変更しても自動では別接続先へ再送しません。\n\nHTTP（受信APIへ送信）: 受信側のHTTP APIへPOST / PUT / PATCHでJSONを送る方式です。単件・配列・NDJSONを選べ、Basic / Bearer / APIキーを設定できます。200 / 201 / 202 / 204を受付成功とし、accepted / failed / errorsが返れば確認します。Kafka等のブローカーは不要です。\n\nKafka（イベントログ）: Kafka互換ブローカーのトピックへ送信します。record_keyをメッセージキーにし、acks=allとidempotenceを有効化して配送確認を待ちます。再生可能な大量イベントの取り込み向け。SASL PLAIN / SCRAMとTLSに対応します。\n\nMQTT（設備向けPub/Sub）: ブローカーへトピック単位で1イベントずつJSONを送ります。軽量な設備通信やテレメトリー向け。受信側はトピックを購読します。QoS 1/2ではブローカーへの配送確認を待ちますが、受信アプリの処理完了は保証しません。\n\nNATS / JetStream: NATS subjectへJSONを配信します。Core NATSはサーバーまでのflushを確認し、購読者への永続配送は保証しません。JetStreamを有効にすると既存streamへの保存ACKを待ちます。ユーザー / トークン / credentialsファイルに対応します。\n\nWebSocket（常時接続）: ws:// または wss://へ接続し、1イベント1テキストフレームでJSONを送ります。受信確認なしは送信完了まで、textはOK / ACK / accepted、jsonは{\"accepted\":1}の返答を待ちます。受信側とACK方式を合わせます。"
+    },
+    "driver": {
+      "default": "auto",
+      "enum": [
+        "auto",
+        "pymssql",
+        "pyodbc",
+        "oracledb_thin",
+        "oracledb_thick",
+        "psycopg",
+        "pymysql"
+      ],
+      "title": "DBドライバー",
+      "type": "string",
+      "description": "autoは通常の同梱ドライバーを使用。SQL ServerのWindowsパスワードはpymssql、Kerberos / Entra / DSN / 検証TLSはpyodbc。SQL用イメージにはODBC Driver 18を同梱。Oracle Thin / Thickの切替にはプロセス全体の制約があります。"
+    },
+    "database_auth": {
+      "default": "password",
+      "enum": [
+        "password",
+        "windows_password",
+        "kerberos",
+        "client_certificate",
+        "external",
+        "entra_service_principal",
+        "entra_managed_identity",
+        "access_token"
+      ],
+      "title": "DB 認証方式",
+      "type": "string",
+      "description": "password=DBユーザー / SQL Server認証。windows_password=DOMAINとユーザーの資格情報。kerberos=サーバー上のチケットで統合認証。client_certificate=TLS証明書。external=OS / Wallet等の外部認証。Entra系はAzure側設定、access_tokenは取得済みトークンを指定します。DBごとに対応方式を表示します。"
+    },
+    "connection_method": {
+      "default": "host",
+      "enum": [
+        "host",
+        "dsn",
+        "service",
+        "unix_socket",
+        "raw"
+      ],
+      "title": "DB 接続方法",
+      "type": "string",
+      "description": "host=ホストとポート、dsn=ODBC DSN / Oracle TNS名、service=libpq service、unix_socket=事前配置ソケット、raw=暗号化保存したドライバー用接続文字列。接続先に適した方式を選択します。"
+    },
+    "domain": {
+      "default": "",
+      "maxLength": 255,
+      "title": "Windows / SMB ドメイン",
+      "type": "string",
+      "description": "例: CORP。ユーザー名とは分けて指定。Windows認証 / NTLMではCORP\\usernameへ組み立てます。Kerberos統合認証はチケットのprincipalを使用します。"
+    },
+    "dsn": {
+      "default": "",
+      "maxLength": 255,
+      "title": "DSN / TNS / libpq service 名",
+      "type": "string",
+      "description": "SQL Serverはodbc.iniのDSN名、Oracleはtnsnames.oraのTNSエイリアス、PostgreSQLはpg_service.confのサービス名。設定ファイルと必要なドライバーを配置します。"
+    },
+    "connection_string": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "詳細接続文字列（暗号化・非表示）",
+      "description": "raw方式で使用。SQL ServerはODBC接続文字列、OracleはEasy Connectまたは接続記述子、PostgreSQLはlibpq URI / key=value、MySQL / MariaDBはmysql://user:password@host/db。値は書き出しに含めません。SQL Serverのrawはこの内容が認証・TLSを含め優先します。"
+    },
+    "db_access_token": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "DB アクセストークン",
+      "description": "取得済みのDB向けOAuth / Entraトークン。アプリは取得・更新しません。有効期限が切れる前に接続プロファイルを更新してください。値は暗号化保存され、書き出しには含まれません。"
+    },
+    "odbc_driver": {
+      "default": "ODBC Driver 18 for SQL Server",
+      "maxLength": 128,
+      "title": "ODBC ドライバー名",
+      "type": "string",
+      "description": "例: ODBC Driver 18 for SQL Server。アプリサーバーにインストールされた名前と一致させます。SQL用Dockerイメージには18を同梱します。"
+    },
+    "unix_socket": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "Unix ソケットのパス",
+      "type": "string",
+      "description": "PostgreSQLはソケットのあるディレクトリ、MySQL / MariaDBは.sockファイル。ソケットをconnection-files領域へマウントして指定します。ローカルOSの認証設定・権限が必要です。"
+    },
+    "config_dir": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "Oracle 設定ディレクトリ",
+      "type": "string",
+      "description": "tnsnames.ora等を置くconnection-files内の相対パス。例: oracle。Thickでは起動時のOracle Client設定も合わせます。"
+    },
+    "wallet_location": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "Oracle Wallet ディレクトリ",
+      "type": "string",
+      "description": "connection-files内の相対パス。Thinはewallet.pem、Thickはcwallet.sso等が必要です。TLS通信とDBユーザー認証は別に設定します。"
+    },
+    "wallet_password": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Oracle Wallet パスワード",
+      "description": "Wallet暗号鍵のパスワード。DBユーザーのパスワードとは別です。空欄は同じ接続先の保存済み値を維持します。"
+    },
+    "tls_ca_file": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "TLS CA 証明書ファイル",
+      "type": "string",
+      "description": "connection-files領域のPEMファイル。独自CAのPostgreSQL / MySQL / Oracle / ファイル転送 / ストリーム用。空欄はシステムの信頼ストアを使用。ODBCはOSの証明書ストアを使用します。"
+    },
+    "tls_cert_file": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "TLS クライアント証明書",
+      "type": "string",
+      "description": "connection-files内のPEMファイル。mTLS / 証明書認証で使用。対応する秘密鍵も指定します。"
+    },
+    "tls_key_file": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "TLS クライアント秘密鍵ファイル",
+      "type": "string",
+      "description": "connection-files内のPEM秘密鍵。アップロードしたファイルはアクセス権600で保存され、プリセットには含まれません。"
+    },
+    "tls_key_password": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "TLS 秘密鍵のパスフレーズ",
+      "description": "暗号化されたクライアント秘密鍵を使用する場合に指定。値は暗号化保存します。"
+    },
+    "driver_options": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "maxProperties": 30,
+      "title": "追加ドライバー設定 JSON",
+      "type": "object",
+      "description": "SQL Server: appname / tds_version。Oracle: retry_count / retry_delay / expire_time / stmtcachesize / disable_oob。PostgreSQL: application_name / options / client_encoding / target_session_attrs / gssencmode / krbsrvname / passfile。MySQL系: charset / sql_mode / init_command / program_name。認証情報は専用欄へ指定します。"
+    },
+    "share": {
+      "default": "",
+      "maxLength": 255,
+      "title": "SMB 共有名",
+      "type": "string",
+      "description": "例: landing。サーバー名やUNCパス全体ではなく共有名のみ。共有内の保存先はディレクトリ欄で指定します。"
+    },
+    "file_auth": {
+      "default": "password",
+      "enum": [
+        "password",
+        "kerberos",
+        "ssh_key",
+        "anonymous"
+      ],
+      "title": "ファイル転送の認証",
+      "type": "string",
+      "description": "password=ユーザー / パスワード、kerberos=SMBのチケット認証、ssh_key=SFTP秘密鍵、anonymous=匿名FTP。選んだ方式に対応する設定欄を使用します。"
+    },
+    "ssh_private_key": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "SSH 秘密鍵（暗号化・非表示）",
+      "description": "OpenSSH / PEMの秘密鍵全文を貼り付けます。RSA / ECDSA / Ed25519に対応。SSH鍵ファイルのパスとどちらかを指定。秘密鍵は暗号化して保存します。"
+    },
+    "ssh_key_password": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "SSH 秘密鍵のパスフレーズ",
+      "description": "暗号化されたSSH秘密鍵を開くパスフレーズ。SSHユーザーのログインパスワードとは別です。"
+    },
+    "ssh_key_file": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "SSH 秘密鍵ファイル",
+      "type": "string",
+      "description": "connection-files領域内の相対パス。鍵全文を入力する代わりに使用できます。"
+    },
+    "ssh_known_hosts": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "SSH known_hosts ファイル",
+      "type": "string",
+      "description": "connection-files内のknown_hosts。空欄はアプリ実行ユーザーの既存ファイル。ホスト鍵の照合に使用します。"
+    },
+    "ssh_host_key_policy": {
+      "default": "known_hosts",
+      "enum": [
+        "known_hosts",
+        "sha256",
+        "accept_any"
+      ],
+      "title": "SSH ホスト鍵の検証",
+      "type": "string",
+      "description": "known_hosts=登録済み鍵と照合、sha256=指定フィンガープリントと照合、accept_any=検証なし。初期値はknown_hosts。自己署名のテストでもsha256で固定できます。"
+    },
+    "ssh_host_key_sha256": {
+      "default": "",
+      "maxLength": 128,
+      "title": "SSH ホスト鍵 SHA256",
+      "type": "string",
+      "description": "例: SHA256:Abc...。信頼できる経路で取得したサーバー鍵のフィンガープリントを入力します。末尾の=は不要。"
+    },
+    "ftp_tls_mode": {
+      "default": "explicit",
+      "enum": [
+        "explicit",
+        "implicit"
+      ],
+      "title": "FTPS 接続方式",
+      "type": "string",
+      "description": "explicit=接続後にAUTH TLSで暗号化、通常21番。implicit=最初からTLS、通常990番。TLS off時は通常FTPになります。"
+    },
+    "ftp_passive": {
+      "default": true,
+      "title": "FTP パッシブモード",
+      "type": "boolean",
+      "description": "有効ならクライアント側からデータ接続を開始。通常はこちらを使用します。サーバーのパッシブポート範囲へ到達できる必要があります。"
+    },
+    "ftp_encoding": {
+      "default": "utf-8",
+      "maxLength": 64,
+      "title": "FTP パス文字コード",
+      "type": "string",
+      "description": "ファイル名と制御通信の文字コード。通常utf-8。古いサーバーではcp932等を指定します。生成CSVの文字コードとは別です。"
+    },
+    "smb_encrypt": {
+      "default": true,
+      "title": "SMB 転送暗号化",
+      "type": "boolean",
+      "description": "既定は有効。SMB3サーバーの暗号化を要求します。古い共有サーバーで無効化する場合はネットワーク条件を確認してください。"
+    },
+    "nfs_expected_source": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "NFS マウント元の確認",
+      "type": "string",
+      "description": "任意。例: nas.example:/exports/landing。指定すると実際のマウント元と一致することを確認します。マウント操作自体はホストで行います。"
+    },
+    "kafka_sasl_mechanism": {
+      "default": "none",
+      "enum": [
+        "none",
+        "PLAIN",
+        "SCRAM-SHA-256",
+        "SCRAM-SHA-512"
+      ],
+      "title": "Kafka SASL 認証",
+      "type": "string",
+      "description": "none=クライアント証明書または認証なし、PLAIN / SCRAM-SHA-256 / SCRAM-SHA-512=ユーザーとパスワード。TLSと組み合わせてSASL_SSLになります。"
+    },
+    "bootstrap_servers": {
+      "default": "",
+      "maxLength": 2048,
+      "title": "Kafka ブートストラップサーバー",
+      "type": "string",
+      "description": "例: broker-a:9092,broker-b:9092。空欄ならホストとポートを使用。各ブローカーのadvertised.listenersにも到達できる必要があります。"
+    },
+    "amqp_virtual_host": {
+      "default": "/",
+      "maxLength": 255,
+      "title": "AMQP virtual host",
+      "type": "string",
+      "description": "RabbitMQ等の論理的な接続領域。既定は/。ユーザーにこのvhostの書き込み権限が必要です。"
+    },
+    "amqp_exchange": {
+      "default": "",
+      "maxLength": 255,
+      "title": "AMQP exchange",
+      "type": "string",
+      "description": "既存exchangeの名前。空欄はdefault exchangeで、トピック欄の名前がキュー名になります。配送はmandatory + publisher confirmで確認します。"
+    },
+    "amqp_declare_queue": {
+      "default": false,
+      "title": "AMQP キューを作成",
+      "type": "boolean",
+      "description": "exchangeが空の場合だけ、配送先名のdurableキューを作成します。既存キューと属性が異なると接続エラーになります。"
+    },
+    "nats_token": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "NATS トークン",
+      "description": "NATSのトークン認証を使う場合の値。ユーザー / パスワードとの重複指定は避けてください。暗号化保存されます。"
+    },
+    "nats_credentials_file": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "NATS credentials ファイル",
+      "type": "string",
+      "description": "JWT / NKey認証用の.credsファイル。connection-files内のパス。ユーザー / トークンを使わない場合に指定します。"
+    },
+    "nats_jetstream": {
+      "default": false,
+      "title": "NATS JetStream 保存確認",
+      "type": "boolean",
+      "description": "有効ならJetStream streamへの保存ACKを待ちます。対象subjectを受け入れるstreamを事前作成してください。無効はCore NATS配信です。"
+    },
+    "websocket_subprotocols": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "WebSocket サブプロトコル JSON",
+      "type": "array",
+      "description": "例: [\"events.v1\"]。受信側が要求するサブプロトコル名。空の配列は指定なしです。"
+    },
+    "websocket_ack": {
+      "default": "none",
+      "enum": [
+        "none",
+        "text",
+        "json"
+      ],
+      "title": "WebSocket 受信ACK",
+      "type": "string",
+      "description": "none=フレーム送信まで、text=OK / ACK / acceptedを待つ、json={\"accepted\":1}を待つ。noneでは受信アプリの処理完了を確認しません。"
+    },
+    "host": {
+      "default": "",
+      "maxLength": 255,
+      "title": "ホスト",
+      "type": "string",
+      "description": "接続先のDNS名またはIPアドレス。http://、ポート、ユーザー名は含めません。コンテナから到達できる名前を指定します。"
+    },
+    "port": {
+      "anyOf": [
+        {
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "ポート",
+      "description": "空欄ならDB標準ポート、MQTTは1883またはTLS時8883。接続先に合わせてポートを指定してください。"
+    },
+    "database": {
+      "default": "",
+      "maxLength": 255,
+      "title": "データベース名",
+      "type": "string",
+      "description": "既存の接続先データベース。Oracleではサービス名 / SIDを使います。DB自体は自動作成しません。"
+    },
+    "username": {
+      "default": "",
+      "maxLength": 255,
+      "title": "ユーザー名",
+      "type": "string",
+      "description": "書き込み先専用のユーザーを推奨。HTTP Basic認証でもこの欄を使用します。"
+    },
+    "password": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "パスワード",
+      "description": "書き込み専用の欄。空欄で保存すると同じ接続先の既存値を維持します。値は画面・JSON書き出しに戻りません。接続先を変更した場合は再入力してください。"
+    },
+    "service_name": {
+      "default": "",
+      "maxLength": 255,
+      "title": "Oracle サービス名",
+      "type": "string",
+      "description": "例: FREEPDB1。サービス名かSIDの片方だけを設定します。Thinドライバーで接続します。"
+    },
+    "sid": {
+      "default": "",
+      "maxLength": 255,
+      "title": "Oracle SID",
+      "type": "string",
+      "description": "サービス名を使用しない場合のSID。例: ORCL。サービス名と同時には指定できません。"
+    },
+    "ssl_mode": {
+      "default": "require",
+      "enum": [
+        "off",
+        "require",
+        "verify"
+      ],
+      "title": "通信のTLS",
+      "type": "string",
+      "description": "off=平文、require=暗号化、verify=暗号化と証明書・ホスト検証。SQL Serverの同梱ドライバーはoff / require。OracleのTLSはTCPSリスナーが必要。HTTP/S3のrequire / verifyにはHTTPS URLを指定します。"
+    },
+    "directory": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "出力ディレクトリ",
+      "type": "string",
+      "description": "アプリから見えるパス。構成例では /landing またはその下の任意のディレクトリ。ホスト側のマウント元へ保存されます。FILE_ALLOWED_ROOTSで許可する領域を増やせます。"
+    },
+    "sqlite_path": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "SQLiteファイル",
+      "type": "string",
+      "description": "databases領域内の相対パス。例: trials/demo.sqlite3。SQLiteは追加サーバーなしで試せます。"
+    },
+    "endpoint_url": {
+      "default": "",
+      "maxLength": 2048,
+      "title": "S3互換エンドポイント",
+      "type": "string",
+      "description": "R2、S3互換ストレージ等のHTTP(S) URL。AWS S3は空欄可。URLに認証情報は含めず、アクセスキー欄を使います。"
+    },
+    "bucket": {
+      "default": "",
+      "maxLength": 255,
+      "title": "バケット名",
+      "type": "string",
+      "description": "既存のバケットを指定します。バケットは自動作成しません。接続テストはHeadBucketのみです。"
+    },
+    "prefix": {
+      "default": "",
+      "maxLength": 1024,
+      "title": "S3 キー接頭辞",
+      "type": "string",
+      "description": "バケット内の相対パス。例: landing/source-a。/から始めず、..を含めません。"
+    },
+    "region": {
+      "default": "auto",
+      "maxLength": 128,
+      "title": "リージョン",
+      "type": "string",
+      "description": "R2はauto、AWS S3はap-northeast-1等。署名に使用します。"
+    },
+    "access_key": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "アクセスキーID",
+      "description": "S3互換ストレージの認証情報。暗号化して保存します。空欄は既存値を維持。実行環境のIAM資格情報は自動使用しません。"
+    },
+    "secret_key": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "シークレットアクセスキー",
+      "description": "アクセスキーに対応する秘密鍵。画面と書き出しでは値を返しません。"
+    },
+    "session_token": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "セッショントークン",
+      "description": "一時的なS3認証情報を使う場合のみ指定。有効期限は利用者側で更新してください。"
+    },
+    "url": {
+      "default": "",
+      "maxLength": 2048,
+      "title": "送信URL",
+      "type": "string",
+      "description": "HTTP受信側の完全なURL。例: http://receiver:8080/events。認証は別の欄で設定します。リダイレクトには追従しません。"
+    },
+    "auth_mode": {
+      "default": "none",
+      "enum": [
+        "none",
+        "basic",
+        "bearer",
+        "api_key"
+      ],
+      "title": "HTTP 認証方式",
+      "type": "string",
+      "description": "none=認証なし、basic=ユーザー名とパスワード、bearer=Bearerトークン、api_key=指定ヘッダーにAPIキー。"
+    },
+    "bearer_token": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Bearerトークン",
+      "description": "Authorization: Bearer に付加する値。Bearerという接頭辞は入力しません。"
+    },
+    "api_key": {
+      "anyOf": [
+        {
+          "format": "password",
+          "type": "string",
+          "writeOnly": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "APIキー",
+      "description": "APIキーヘッダーに付加する値。空欄は同じ接続先の保存済み値を維持します。"
+    },
+    "api_key_header": {
+      "default": "X-API-Key",
+      "pattern": "^[A-Za-z0-9-]{1,64}$",
+      "title": "APIキーヘッダー名",
+      "type": "string",
+      "description": "例: X-API-Key。APIキー認証を選択した場合だけ使用します。"
+    },
+    "topic": {
+      "default": "data/events",
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "配送先トピック / subject / routing key",
+      "type": "string",
+      "description": "MQTTは例data/events、Kafkaはdata-events、NATSはdata.events、AMQPはrouting keyまたはキュー名。HTTP / WebSocket / キャプチャでは配送先名としては使用しません。実行条件でテンプレートを指定できます。"
+    },
+    "qos": {
+      "default": 1,
+      "maximum": 2,
+      "minimum": 0,
+      "title": "MQTT QoS",
+      "type": "integer",
+      "description": "0=到達保証なし、1=少なくとも1回、2=MQTT区間で1回。再送や受信側の処理を含む全体の重複排除はrecord_keyで実装します。"
+    },
+    "mqtt_version": {
+      "default": "3.1.1",
+      "enum": [
+        "3.1.1",
+        "5"
+      ],
+      "title": "MQTT バージョン",
+      "type": "string",
+      "description": "ブローカーに合わせて3.1.1または5を選択します。"
+    },
+    "client_id": {
+      "default": "",
+      "maxLength": 128,
+      "title": "MQTT クライアントID",
+      "type": "string",
+      "description": "空欄なら接続ごとにランダム生成。固定する場合は他のクライアントと重複させないでください。"
+    },
+    "keepalive": {
+      "default": 30,
+      "maximum": 3600,
+      "minimum": 5,
+      "title": "Keep Alive 秒",
+      "type": "integer",
+      "description": "MQTTブローカーへの生存確認間隔。5〜3600秒。"
+    },
+    "retain": {
+      "default": false,
+      "title": "MQTT retain",
+      "type": "boolean",
+      "description": "有効にすると各トピックの最後のメッセージをブローカーが保持します。時系列イベントでは通常無効です。"
+    },
+    "http_method": {
+      "default": "POST",
+      "enum": [
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "title": "HTTP メソッド",
+      "type": "string",
+      "description": "POST / PUT / PATCH。受信先APIの仕様に合わせます。"
+    },
+    "content_type": {
+      "default": "",
+      "maxLength": 128,
+      "pattern": "^[^\\r\\n]*$",
+      "title": "Content-Type 上書き",
+      "type": "string",
+      "description": "空欄ならJSONはapplication/json、NDJSONはapplication/x-ndjson。受信側が専用のMIME型を要求する場合に設定します。"
+    },
+    "headers": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "format": "password",
+            "type": "string",
+            "writeOnly": true
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "maxProperties": 30,
+      "title": "追加HTTPヘッダー JSON",
+      "type": "object",
+      "description": "例: {\"X-Tenant\":\"sandbox\"}。値はすべて暗号化・非表示。既存名にnullで値を維持、名前を削除してそのヘッダーを削除。Authorization等は認証設定を使います。"
+    },
+    "delivery_attempts": {
+      "default": 1,
+      "maximum": 10,
+      "minimum": 1,
+      "title": "1バッチの送信試行数",
+      "type": "integer",
+      "description": "1〜10回。失敗したバッチは永続outboxに残ります。受信済みでも応答が失われた場合は重複し得るためrecord_keyを使います。"
+    },
+    "retry_backoff_ms": {
+      "default": 500,
+      "maximum": 60000,
+      "minimum": 0,
+      "title": "再試行の基準待機 ms",
+      "type": "integer",
+      "description": "同一バッチの再試行間隔。試行ごとに2倍、最大60秒。0は待機なし。"
+    },
+    "timeout_seconds": {
+      "default": 15,
+      "maximum": 120,
+      "minimum": 1,
+      "title": "接続・通信タイムアウト 秒",
+      "type": "integer",
+      "description": "1〜120秒。DBドライバー、MQTT接続と送信待機、HTTP/S3の通信に適用します。"
+    },
+    "clear_secrets": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "削除する保存済み認証情報 JSON",
+      "type": "array",
+      "description": "例: [\"password\"]。空欄による維持ではなく、明示的に保存値を削除したい場合に指定します。"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "kind"
+  ],
+  "title": "ConnectionProfile",
+  "type": "object"
+}
