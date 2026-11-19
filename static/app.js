@@ -1,7 +1,11 @@
 // 設定画面の入口。APIのスキーマから編集欄を作り、接続・生成・履歴の操作をサーバーへ渡す。
 "use strict";
-const $ = /* 指定したセレクターに最初に一致するDOM要素を返す。一致しなければnull。 */ (s) => document.querySelector(s),
-  clone = /* 設定を構造化複製し、編集が保存済みの元オブジェクトへ波及するのを避ける。 */ (v) => structuredClone(v);
+const $ =
+  /* 指定したセレクターに最初に一致するDOM要素を返す。一致しなければnull。 */
+  (s) => document.querySelector(s),
+  clone =
+    /* 設定を構造化複製し、編集が保存済みの元オブジェクトへ波及するのを避ける。 */
+    (v) => structuredClone(v);
 const state = {
   info: null,
   schemas: null,
@@ -12,7 +16,9 @@ const state = {
   current: null,
 };
 let uid = 0;
-const el = /* タグと属性からDOM要素を作る。on接頭辞はイベント登録に使い、本文はHTMLとして解釈しない。 */ (tag, attrs = {}, text = "") => {
+const el =
+  /* タグと属性からDOM要素を作る。on接頭辞はイベント登録に使い、本文はHTMLとして解釈しない。 */
+  (tag, attrs = {}, text = "") => {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (k === "class") n.className = v;
@@ -48,7 +54,9 @@ async function api(path, body) {
     );
   return value;
 }
-const action = /* ボタンを操作関数へ接続し、実行中の再操作防止と通知を共通化する。 */ (id, fn) =>
+const action =
+  /* ボタンを操作関数へ接続し、実行中の再操作防止と通知を共通化する。 */
+  (id, fn) =>
   $(id).addEventListener("click", /* クリック既定動作を止め、処理中は押下不可にする。失敗は通知し、成否にかかわらず再度有効にする。 */ async (e) => {
     e.preventDefault();
     const b = e.currentTarget;
