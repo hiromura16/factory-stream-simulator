@@ -1122,27 +1122,60 @@ function jobCard(run) {
     );
     c.append(a);
   }
-  const detail = el("details");
+  const detail = el("details", { "data-run-id": run.id });
   detail.append(el("summary", {}, "実行設定と詳細"));
   detail.append(el("pre", {}, JSON.stringify(run, null, 2)));
   c.append(detail);
   return c;
 }
+// 同じ領域・実行IDの開閉を引き継ぎ、別の実行や表示領域には波及させない。
+function replaceJobCards(container, runs) {
+  const openIds = new Set(
+    Array.from(
+      container.querySelectorAll("details[data-run-id][open]"),
+      (detail) => detail.dataset.runId,
+    ),
+  );
+  const focused = document.activeElement;
+  const focusedId = focused?.tagName === "SUMMARY" && container.contains(focused)
+    ? focused.parentElement.dataset.runId
+    : undefined;
+  let nextFocus;
+  const cards = runs.map((run) => {
+    const card = jobCard(run);
+    const detail = card.querySelector("details");
+    detail.open = openIds.has(run.id);
+    if (focusedId === run.id) nextFocus = detail.querySelector("summary");
+    return card;
+  });
+  container.replaceChildren(...cards);
+  // キーボード操作中は、差し替え後の同じ実行の見出しへ戻す。
+  nextFocus?.focus({ preventScroll: true });
+}
+let requestedHistory = 0;
+let renderedHistory = 0;
 // 実行一覧と現在の実行を取得し、終了遷移を通知する。ストリームでは再送待ち集計も更新する。
 async function refreshHistory() {
+  const request = ++requestedHistory;
   const runs = (await api("/api/runs")).runs;
-  $("#historyList").replaceChildren(...runs.map(jobCard));
+  // 手動更新とポーリングの応答が逆転しても、表示済みの新しい状態を戻さない。
+  if (request < renderedHistory) return;
+  renderedHistory = request;
+  // 応答を待っている間の操作も反映できるよう、開閉状態は描画直前に読む。
+  replaceJobCards($("#historyList"), runs);
   const current = runs.find(/* 実行中または停止処理中の一覧項目を現在の実行として選ぶ。 */ (r) => ["running", "stopping"].includes(r.status));
-  $("#currentJob").hidden = !current;
+  const currentJob = $("#currentJob");
+  currentJob.hidden = !current;
+  replaceJobCards(currentJob, current ? [current] : []);
   if (current) {
     state.current = current.id;
-    $("#currentJob").replaceChildren(jobCard(current));
   } else if (state.current) {
     state.current = null;
     notify("実行が終了しました。結果は実行履歴で確認できます。");
   }
   if (state.info.kind === "stream") {
     const out = await api("/api/outbox");
+    if (request < renderedHistory) return;
     $("#outboxSummary").textContent = JSON.stringify(
       { counts: out.counts, legacy_pending: out.legacy_pending },
       null,
