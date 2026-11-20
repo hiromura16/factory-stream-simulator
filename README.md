@@ -94,3 +94,7 @@ v0.1の固定MES/ERP設定JSONはv2の任意項目定義へ置き換えました
 Composeの管理ラベルは既定で `factory.guard.managed=true` です。外部監視側との合意が必要な場合は、非公開の配備設定で `FACTORY_GUARD_LABEL_PREFIX` を指定できます。例えば説明用の値 `synthetic-guard` を指定すると、`synthetic-guard.guard.managed=true` になります。
 
 既存の外部監視との互換性は未確認です。変更前に監視側が照合するラベル名と影響を確認してください。この設定は既存コンテナや監視設定を自動移行せず、デプロイも行いません。
+
+## Dokployでの配置とプロキシ
+
+[Dokploy配置手順](docs/dokploy.md)に、準備・環境変数・永続化・非公開アクセス・確認・更新と、ビルド/実行時のプロキシの違いをまとめています。
