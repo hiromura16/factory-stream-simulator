@@ -2,7 +2,15 @@
   "services": {
     "app": {
       "build": {
-        "context": "."
+        "context": ".",
+        "args": [
+          "HTTP_PROXY",
+          "HTTPS_PROXY",
+          "NO_PROXY",
+          "http_proxy",
+          "https_proxy",
+          "no_proxy"
+        ]
       },
       "image": "factory-stream-simulator:local",
       "restart": "unless-stopped",
