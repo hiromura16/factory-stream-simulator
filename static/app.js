@@ -348,10 +348,10 @@ function scenarioSpec(id, defaults, connection, runKey, at = new Date().toISOStr
 }
 
 // 宛先・送信件数・レート・トピックを先に表示し、イベント定義は折りたたむ。
-function renderStreamRun(root, target) {
+function renderStreamRun(root, target, advancedOpen) {
   const spec = state.spec;
   const [transport, controls] = block(
-    "02 / 接続と送信条件",
+    "基本設定",
     "保存済みのブローカーとトピックを選びます。ローカル記録では外部へ送信しません。",
   );
   const selected = state.connections.find((item) => item.id === spec.connection_id);
@@ -382,37 +382,16 @@ function renderStreamRun(root, target) {
     controls.append(control(key, { ...root.properties[key], title }, spec[key],
       (value) => { spec[key] = value; }, root));
   const streamSchema = deref(root.properties.stream, root);
-  for (const key of ["topic_template", "message_size_bytes", "duplicate_rate"]) {
-    const field = { ...streamSchema.properties[key] };
-    if (key !== "topic_template") field.description += " MQTT・ローカル記録専用です。";
-    if (key === "topic_template") {
-      field.title = "トピック / テンプレート";
-      field.description += topic ? " 空欄の場合の接続先トピック: " + topic : "";
-    }
-    controls.append(control(key, field, spec.stream[key],
-      (value) => { spec.stream[key] = value; }, root));
-  }
-  const rule = spec.anomalies.find((item) => item.name === quickAnomaly);
-  if (rule) {
-    const field = root.$defs.AnomalyRule.properties.probability;
-    controls.append(control("probability", { ...field, title: "異常率 (0〜1)" },
-      rule.probability, (value) => { rule.probability = value; }, root));
-  } else {
-    const jump = el("button", { type: "button", class: "ghost" },
-      "異常率を設定…");
-    jump.addEventListener("click", () => {
-      const advanced = $("#streamAdvanced");
-      advanced.open = true;
-      const anomaly = $("#streamAnomalies");
-      anomaly.open = true;
-      anomaly.querySelector("summary").focus();
-    });
-    controls.append(jump);
-  }
+  const topicField = streamSchema.properties.topic_template;
+  controls.append(control("topic_template", {
+    ...topicField,
+    title: "トピック / テンプレート",
+    description: topicField.description + (topic ? " 空欄の場合の接続先トピック: " + topic : ""),
+  }, spec.stream.topic_template, (value) => { spec.stream.topic_template = value; }, root));
   target.append(transport);
 
   const [advanced, body] = block(
-    "詳細設定（上級者向け）", "属性、本文形式、再試行、異常や障害の条件を編集します。", false,
+    "詳細設定", "属性、本文のサイズ、重複率、再試行、異常や障害の条件を編集します。", advancedOpen,
   );
   advanced.id = "streamAdvanced";
   body.style.display = "block";
@@ -428,8 +407,7 @@ function renderStreamRun(root, target) {
   attrBody.style.display = "block";
   renderFields(attrBody);
   const [bodyOptions, bodyControls] = block("本文形式 / 配送オプション", "", false);
-  renderObject(bodyControls, streamSchema, spec.stream, root,
-    ["topic_template", "message_size_bytes", "duplicate_rate"]);
+  renderObject(bodyControls, streamSchema, spec.stream, root, ["topic_template"]);
   const [anomaly, anomalyBody] = block("異常率・異常イベントのルール", "", false);
   anomaly.id = "streamAnomalies";
   anomalyBody.style.display = "block";
@@ -469,9 +447,10 @@ function renderQuickstart() {
 function renderRun() {
   const root = state.schemas.run,
     target = $("#runEditor");
+  const advancedOpen = $("#streamAdvanced")?.open ?? false;
   target.replaceChildren();
   invalidatePreview();
-  if (state.info.kind === "stream") return renderStreamRun(root, target);
+  if (state.info.kind === "stream") return renderStreamRun(root, target, advancedOpen);
   const [common, body] = block(
     "01 / 実行条件",
     "生成量と速度、再現性を決めます。接続は保存済みのプロファイルを選択します。",
@@ -682,7 +661,10 @@ function validateForm(selector) {
   const form = $(selector);
   for (const input of form.querySelectorAll("input,textarea,select")) {
     if (!input.checkValidity()) {
-      input.closest("details")?.setAttribute("open", "");
+      for (let details = input.closest("details"); details;
+        details = details.parentElement.closest("details")) {
+        details.open = true;
+      }
       input.reportValidity();
       throw new Error("入力内容を確認してください。");
     }

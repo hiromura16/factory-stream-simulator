@@ -10,9 +10,6 @@
   <body>
     <!-- 読解: ツール名と接続表示の領域。health表示はブラウザーが取得した状態で更新する。 --><header>
       <div>
-        <span class="eyebrow"
-          >FACTORY STREAM SIMULATOR <span class="version">v0.2</span></span
-        >
         <h1 id="title">イベント送信シミュレーター</h1>
         <p id="subtitle">設備・センサー・工程イベントを生成し、MQTTブローカーへ送信するシミュレーターです。Kafka、NATS、IoT基盤、ストリーム処理、リアルタイム分析の検証にも利用できます。</p>
       </div>
@@ -22,17 +19,17 @@
       <!-- 読解: data-tabと画面IDの対応で切り替えるナビと説明欄。実処理の開始とは分離する。 --><aside>
         <nav aria-label="メインメニュー">
           <button class="nav active" data-tab="generate">
-            01 <span>イベントを送る</span></button
+            <span>イベントを送る</span></button
           ><button class="nav" data-tab="connections">
-            02 <span>接続先</span></button
+            <span>接続先</span></button
           ><button class="nav" data-tab="presets">
-            03 <span>プリセット / JSON</span></button
+            <span>プリセット / JSON</span></button
           ><button class="nav" data-tab="history">
-            04 <span>実行履歴</span>
+            <span>実行履歴</span>
           </button>
         </nav>
         <div class="aside-note">
-          <span class="eyebrow">CONTEXT HELP</span>
+          <strong>入力項目の説明</strong>
           <p>
             項目にマウスを重ねると、その場で説明を表示します。<b>?</b>
             にキーボードで移動しても読めます。
@@ -45,13 +42,12 @@
         <!-- 読解: プリセット読込み・動的生成条件・プレビュー・実行受付をまとめる。プレビューと投入を別ボタンにする。 --><section id="generate" class="tab active">
           <div class="section-head">
             <div>
-              <span class="eyebrow">EVENT STREAM</span>
               <h2>イベントを送る</h2>
             </div>
             <span class="muted">イベントを選ぶ → 接続と送信条件 → 確認 → 送信</span>
           </div>
           <div id="quickstart" class="card" hidden>
-            <h3>01 / どんなイベントを流しますか？</h3>
+            <h3>イベントのひな型を選ぶ</h3>
             <p class="muted">選択すると合成イベントの設定を読み込みます。接続先は維持し、まだ送信しません。</p>
             <div id="quickstartChoices" class="quickstart-grid"></div>
           </div>
@@ -61,8 +57,8 @@
             <label
               class="compact hint"
               data-help="保存済みプリセットを読み込みます。画面の編集中の設定は置き換わります。"
-              >プリセット<select id="presetSelect"></select></label
-            ><button id="loadPreset">読み込む</button
+              >ひな型（プリセット）<select id="presetSelect"></select></label
+            ><button id="loadPreset">ひな型を読み込む</button
             ><button id="resetRun" class="ghost">初期値</button
             ><button id="toPreset" class="ghost">この設定を保存…</button>
           </div>
@@ -75,14 +71,14 @@
               class="secondary"
               data-help="正常位置と異常位置から最大12件を生成します。接続先への通信・書き込み・送信はありません。"
             >
-              03 / プレビュー</button
+              送信内容の見本を見る</button
             ><button
               id="start"
               class="primary"
               data-help="現在の設定と接続プロファイルの版を固定して実行します。"
             >
-              04 / 送信を開始</button
-            ><span class="muted">実行は各ツール1件ずつ</span>
+              送信を開始</button
+            ><span class="muted">ローカル記録を選ぶと外部へ送信せずに試せます。</span>
           </div>
           <!-- 読解: SQLツールだけで表示する表検査・DDL表示・表準備。表示だけの操作とDDL実行を区別する。 --><div id="sqlActions" class="toolbar card" hidden>
             <button id="inspectTable">接続先の列を確認</button
@@ -98,7 +94,7 @@
             <h3>プレビュー <span class="badge">書き込みなし</span></h3>
             <p id="previewNote"></p>
             <div id="previewMessages"></div>
-            <div id="previewTable" class="table-scroll"></div>
+            <div id="previewTable" class="table-scroll" tabindex="0" role="region" aria-label="生成データの見本"></div>
             <details>
               <summary>詳しいプレビュー情報</summary>
               <pre id="previewJson"></pre>
