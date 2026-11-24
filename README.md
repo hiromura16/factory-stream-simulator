@@ -26,6 +26,8 @@ MQTTのTLS・バージョン・QoS・retain・Keep Alive、HTTPの認証・追�
 
 ## 操作ガイド
 
+[ひな型の選び方・詳細設定の画面・自分のひな型の作り方](docs/preset-guide.md)
+
 [![イベントのひな型、送信条件、見本、送信開始の順を示すストリーム画面。青い枠は詳細設定。](docs/images/operation-guide.png)](docs/images/operation-guide.png)
 
 イベントのひな型を選び、「基本設定」で送信先・件数を確認して「送信内容の見本を見る」を押します。本文サイズ、重複率、異常の割合などを変えるときは「詳細設定」を開きます。

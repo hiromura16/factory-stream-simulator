@@ -50,6 +50,7 @@
             <h3>イベントのひな型を選ぶ</h3>
             <p class="muted">選択すると合成イベントの設定を読み込みます。接続先は維持し、まだ送信しません。</p>
             <div id="quickstartChoices" class="quickstart-grid"></div>
+            <p id="quickstartScenario" class="muted" aria-live="polite"></p>
           </div>
           <details class="card">
             <summary>保存済みプリセットから始める</summary>
@@ -62,7 +63,14 @@
             ><button id="resetRun" class="ghost">初期値</button
             ><button id="toPreset" class="ghost">この設定を保存…</button>
           </div>
-            <p id="presetDetails" class="note" aria-live="polite"></p>
+            <div class="preset-scenario">
+            <strong>どんな状況のひな型か</strong>
+            <p id="presetScenario" aria-live="polite"></p>
+          </div>
+          <details id="presetDetailsPanel" class="preset-help">
+            <summary>生成内容・確認すること・実行前の条件</summary>
+            <p id="presetDetails" class="note"></p>
+          </details>
           </details>
           <!-- 読解: スキーマからJavaScriptが生成欄を構築する空の受け皿。既定のブラウザー送信ではなく操作関数で検証する。 --><form id="runForm" novalidate><div id="runEditor"></div></form>
           <section class="card preview-step" aria-labelledby="streamPreviewTitle">
@@ -162,16 +170,23 @@
             </button>
           </div>
           <div class="card">
+            <section id="presetMetadata" aria-label="ひな型を保存">
+              <h3>ひな型を保存</h3>
+              <p class="muted">新しく保存するときは、既存のひな型と異なるIDを使います。</p>
+              <div class="preset-metadata-fields">
+                <div class="control"><label for="presetId">プリセットID</label>
+                  <input id="presetId" maxlength="64" placeholder="my-preset" />
+                </div>
+                <div class="control"><label for="presetDisplayName">ひな型の表示名（任意）</label>
+                  <input id="presetDisplayName" maxlength="120" placeholder="今の名前を使う場合は空欄" />
+                </div>
+              </div>
+              <label for="presetPurpose">想定する状況（任意）</label>
+              <textarea id="presetPurpose" maxlength="1000" rows="2" placeholder="何を試すのか、結果のどこを見るのか"></textarea>
+              <button id="savePreset" class="primary" type="button">ひな型として保存</button>
+            </section>
             <div class="grid">
               <label
-                class="hint"
-                data-help="保存するプリセットのID。英数字・ハイフン・下線、64文字以内。同じIDで保存すると更新します。"
-                >プリセットID <span class="help" tabindex="0">?</span
-                ><input
-                  id="presetId"
-                  value="my-preset"
-                  pattern="[A-Za-z0-9_-]{1,64}" /></label
-              ><label
                 class="hint"
                 data-help="このJSONを別のアプリへ移す場合は、接続IDに対応する接続プロファイルを移動先でも設定してください。認証情報は含まれません。"
                 >JSONファイルから読み込む
@@ -194,10 +209,8 @@
               ></textarea>
             </label>
             <div class="actionbar">
-              <button id="applyJson">JSONを画面に適用</button
-              ><button id="savePreset" class="primary">
-                JSONをプリセットとして保存</button
-              ><button id="exportPreset">JSONを書き出す</button>
+              <button id="applyJson">JSONを画面に適用</button>
+              <button id="exportPreset">JSONを書き出す</button>
             </div>
             <p class="muted">
               接続先のIDを参照します。パスワードやトークンは接続先画面で設定してください。

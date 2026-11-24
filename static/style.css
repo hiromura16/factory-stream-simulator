@@ -634,3 +634,30 @@ header > .badge {
     flex-basis: 100%;
   }
 }
+
+.preset-scenario {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
+  background: var(--panel2);
+  overflow-wrap: anywhere;
+}
+.preset-scenario p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+
+#presetMetadata {
+  margin-bottom: 18px;
+}
+#presetMetadata > label,
+#presetMetadata > button {
+  margin-top: 12px;
+}
+
+.preset-metadata-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
+  gap: 12px 18px;
+}
