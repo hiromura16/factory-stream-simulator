@@ -1,3 +1,17 @@
+@font-face {
+  font-family: "Zen Kaku Gothic New";
+  src: url("/static/fonts/zen-kaku-gothic-new-regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Zen Kaku Gothic New";
+  src: url("/static/fonts/zen-kaku-gothic-new-bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600 800;
+  font-display: swap;
+}
 /* 読解: 色・文字・寸法の共通基準。変数を介して各画面の見た目を揃える。 */:root {
   color-scheme: dark;
   --bg: #10171d;
@@ -8,7 +22,7 @@
   --muted: #9dafbb;
   --accent: #72dec7;
   --warn: #f7c783;
-  font-family: Inter, "Noto Sans JP", system-ui, sans-serif;
+  font-family: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", system-ui, sans-serif;
   font-size: 14px;
 }
 /* 読解: 幅と余白の計算をborder-boxへ統一し、入力欄のはみ出しを抑える。 */* {
@@ -162,7 +176,7 @@ input[type="file"] {
 textarea {
   resize: vertical;
   line-height: 1.6;
-  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Zen Kaku Gothic New", "Yu Gothic", monospace;
 }
 /* 読解: キーボード操作時の焦点と不正入力を視覚化し、通常状態と区別する。 */input:focus,
 select:focus,
@@ -567,5 +581,56 @@ th {
   .nav {
     min-width: 0;
     white-space: normal;
+  }
+}
+
+header {
+  gap: 16px;
+}
+header > div {
+  min-width: 0;
+}
+header > .badge {
+  flex-shrink: 0;
+}
+.nav {
+  min-height: 44px;
+  font-size: 13px;
+  align-items: center;
+}
+#generate button,
+#generate summary {
+  min-height: 40px;
+}
+#generate summary {
+  padding-block: 8px;
+  line-height: 1.6;
+}
+#generate summary:focus-visible,
+#generate .table-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.preview-step {
+  border-color: #49766e;
+  background: linear-gradient(120deg, #1a2e33, var(--panel) 60%);
+}
+.preview-step h3 {
+  margin-bottom: 6px;
+}
+.preview-step .muted {
+  margin-top: 0;
+}
+.run-step .actionbar {
+  margin: 12px 0;
+}
+@media (max-width: 520px) {
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  #generate .toolbar > label {
+    flex-basis: 100%;
   }
 }

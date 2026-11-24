@@ -65,21 +65,11 @@
             <p id="presetDetails" class="note" aria-live="polite"></p>
           </details>
           <!-- 読解: スキーマからJavaScriptが生成欄を構築する空の受け皿。既定のブラウザー送信ではなく操作関数で検証する。 --><form id="runForm" novalidate><div id="runEditor"></div></form>
-          <div class="actionbar">
-            <button
-              id="preview"
-              class="secondary"
-              data-help="正常位置と異常位置から最大12件を生成します。接続先への通信・書き込み・送信はありません。"
-            >
-              送信内容の見本を見る</button
-            ><button
-              id="start"
-              class="primary"
-              data-help="現在の設定と接続プロファイルの版を固定して実行します。"
-            >
-              送信を開始</button
-            ><span class="muted">ローカル記録を選ぶと外部へ送信せずに試せます。</span>
-          </div>
+          <section class="card preview-step" aria-labelledby="streamPreviewTitle">
+            <h3 id="streamPreviewTitle">送信内容を確認</h3>
+            <p class="muted">メッセージ本文、トピック、サイズを送信前に確認できます。</p>
+            <button id="preview" class="primary" type="button">送信内容の見本を見る</button>
+          </section>
           <!-- 読解: SQLツールだけで表示する表検査・DDL表示・表準備。表示だけの操作とDDL実行を区別する。 --><div id="sqlActions" class="toolbar card" hidden>
             <button id="inspectTable">接続先の列を確認</button
             ><button id="showDdl">作成DDLを表示</button
@@ -100,6 +90,11 @@
               <pre id="previewJson"></pre>
             </details>
           </div>
+          <section class="card run-step" aria-labelledby="streamRunTitle">
+            <h3 id="streamRunTitle">実行</h3>
+            <p class="muted">送信先を確認して開始します。ローカル記録を選ぶと外部へ送信せずに試せます。</p>
+            <button id="start" type="button">送信を開始</button>
+          </section>
           <!-- 読解: 非同期ジョブの保存済み状態を表示する。受付と完了を区別するため独立した領域にする。 --><div id="currentJob" class="card" hidden></div>
         </section>
         <!-- 読解: 保存された接続先の一覧と編集。疎通試験は保存済みIDを使い、秘密値の再表示は行わない。 --><section id="connections" class="tab">

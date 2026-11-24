@@ -1,0 +1,3 @@
+Zen Kaku Gothic New, Regular and Bold
+https://github.com/google/fonts/tree/ba225958c40ae6268a256861d80355a84b26e535/ofl/zenkakugothicnew
+WOFF2 subsets for the Japanese interface and the example data bundled with the apps.
