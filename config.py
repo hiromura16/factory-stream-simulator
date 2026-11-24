@@ -417,6 +417,8 @@ class StreamOptions(Model):
     http_body: Literal["array", "single", "ndjson"] = "array"
     topic_template: str = Field(default="", max_length=512)
     payload_template: Any = None
+    message_size_bytes: int = Field(default=0, ge=0, le=65536)
+    duplicate_rate: float = Field(default=0, ge=0, le=1)
     delivery_attempts: int | None = Field(default=None, ge=1, le=10)
     retry_backoff_ms: int | None = Field(default=None, ge=0, le=60000)
 

@@ -6,6 +6,15 @@ const $ =
   clone =
     /* 設定を構造化複製し、編集が保存済みの元オブジェクトへ波及するのを避ける。 */
     (v) => structuredClone(v);
+// 選択例はデータ生成だけを定義し、ブローカーは利用者が別途選ぶ。
+const streamScenarios = {
+  equipment: ["設備稼働イベント", "LINE01", "RUN", "STOP", "value", 42],
+  temperature: ["温度センサーイベント", "TEMP01", "NORMAL", "HIGH", "temperature_c", 23.5],
+  process: ["工程進捗イベント", "PROCESS01", "IN_PROGRESS", "DELAYED", "progress_pct", 42],
+  alarm: ["アラームイベント", "ALARM01", "WARNING", "CRITICAL", "severity", 2],
+};
+const quickAnomaly = "クイックスタートの異常";
+
 const state = {
   info: null,
   schemas: null,
@@ -14,6 +23,8 @@ const state = {
   presets: [],
   profile: null,
   current: null,
+  specRevision: 0,
+  previewedDestination: null,
 };
 let uid = 0;
 const el =
@@ -34,24 +45,27 @@ function notify(text, error = false) {
   $("#notice").className = error ? "error" : "";
 }
 // 本文なしはGET、ありはJSON POSTで同一画面のAPIを呼ぶ。JSONを返し、HTTP失敗は詳細付き例外に変換する。
-async function api(path, body) {
+async function api(path, body, headers = {}) {
   const r = await fetch(
     path,
     body === undefined
       ? {}
       : {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...headers },
           body: JSON.stringify(body),
         },
   );
   const value = await r.json();
-  if (!r.ok)
-    throw new Error(
+  if (!r.ok) {
+    const error = new Error(
       typeof value.detail === "string"
         ? value.detail
         : JSON.stringify(value.detail || value),
     );
+    error.status = r.status;
+    throw error;
+  }
   return value;
 }
 const action =
@@ -309,11 +323,155 @@ function renderObject(container, schema, model, root, exclude = []) {
     );
   }
 }
+// 同じ接続先を維持し、別実行として安全に試せる小さな合成イベントを用意する。
+function scenarioSpec(id, defaults, connection, runKey, at = new Date().toISOString()) {
+  const [name, entity, status, abnormal, metric, value] = streamScenarios[id];
+  const spec = clone(defaults);
+  Object.assign(spec, {
+    name, run_key: runKey, rows: 30, target_rate: 5,
+    batch_size: 5, connection_id: connection, connection_revision: null,
+    parameters: { ...spec.parameters, start_time: at },
+    description: "合成イベント30件の試し送信。接続先とトピックを確認してください。",
+    fields: [
+      { name: "entity_id", generator: "constant", value: entity },
+      { name: "status", generator: "constant", value: status },
+      { name: metric, data_type: "number", generator: "constant", value },
+      { name: "event_time", data_type: "datetime", generator: "timestamp",
+        start: "$start_time", step: 1, group_size: 1 },
+    ],
+    anomalies: [{
+      name: quickAnomaly, field: "status", operation: "set",
+      value: abnormal, probability: id === "alarm" ? 0.2 : 0,
+    }],
+  });
+  return spec;
+}
+
+// 宛先・送信件数・レート・トピックを先に表示し、イベント定義は折りたたむ。
+function renderStreamRun(root, target) {
+  const spec = state.spec;
+  const [transport, controls] = block(
+    "02 / 接続と送信条件",
+    "保存済みのブローカーとトピックを選びます。ローカル記録では外部へ送信しません。",
+  );
+  const selected = state.connections.find((item) => item.id === spec.connection_id);
+  const topic = selected?.topic ?? "";
+  controls.append(el(
+    "p", { class: "muted" },
+    selected
+      ? "配信先: " + selected.name + " · " +
+        (selected.kind === "mqtt"
+          ? selected.host + (selected.port ? ":" + selected.port : "")
+          : selected.kind) + " · 版 " + selected.revision
+      : "保存済みの配信先を選んでください。",
+  ));
+  controls.append(control(
+    "connection_id", { ...root.properties.connection_id, title: "ブローカー / 配信先" },
+    spec.connection_id, (value) => {
+      spec.connection_id = value;
+      spec.connection_revision = null;
+      renderRun();
+      $("#runEditor select")?.focus();
+    }, root,
+  ));
+  const fields = {
+    rows: "送信件数（重複分を除く）",
+    target_rate: "目標送信レート（メッセージ / 秒）",
+  };
+  for (const [key, title] of Object.entries(fields))
+    controls.append(control(key, { ...root.properties[key], title }, spec[key],
+      (value) => { spec[key] = value; }, root));
+  const streamSchema = deref(root.properties.stream, root);
+  for (const key of ["topic_template", "message_size_bytes", "duplicate_rate"]) {
+    const field = { ...streamSchema.properties[key] };
+    if (key !== "topic_template") field.description += " MQTT・ローカル記録専用です。";
+    if (key === "topic_template") {
+      field.title = "トピック / テンプレート";
+      field.description += topic ? " 空欄の場合の接続先トピック: " + topic : "";
+    }
+    controls.append(control(key, field, spec.stream[key],
+      (value) => { spec.stream[key] = value; }, root));
+  }
+  const rule = spec.anomalies.find((item) => item.name === quickAnomaly);
+  if (rule) {
+    const field = root.$defs.AnomalyRule.properties.probability;
+    controls.append(control("probability", { ...field, title: "異常率 (0〜1)" },
+      rule.probability, (value) => { rule.probability = value; }, root));
+  } else {
+    const jump = el("button", { type: "button", class: "ghost" },
+      "異常率を設定…");
+    jump.addEventListener("click", () => {
+      const advanced = $("#streamAdvanced");
+      advanced.open = true;
+      const anomaly = $("#streamAnomalies");
+      anomaly.open = true;
+      anomaly.querySelector("summary").focus();
+    });
+    controls.append(jump);
+  }
+  target.append(transport);
+
+  const [advanced, body] = block(
+    "詳細設定（上級者向け）", "属性、本文形式、再試行、異常や障害の条件を編集します。", false,
+  );
+  advanced.id = "streamAdvanced";
+  body.style.display = "block";
+  const [common, general] = block("実行の上限・ペース・再現性", "", false);
+  renderObject(general, root, spec, root, [
+    "version", "connection_revision", "connection_id", "task", "rows", "target_rate",
+    "parameters", "fields", "anomalies", "faults", "sql", "files", "stream",
+  ]);
+  const [parameters, params] = block("共有パラメーター", "", false);
+  params.append(control("parameters", root.properties.parameters, spec.parameters,
+    (value) => { spec.parameters = value; }, root));
+  const [attrs, attrBody] = block("イベント定義 / イベント属性", "", false);
+  attrBody.style.display = "block";
+  renderFields(attrBody);
+  const [bodyOptions, bodyControls] = block("本文形式 / 配送オプション", "", false);
+  renderObject(bodyControls, streamSchema, spec.stream, root,
+    ["topic_template", "message_size_bytes", "duplicate_rate"]);
+  const [anomaly, anomalyBody] = block("異常率・異常イベントのルール", "", false);
+  anomaly.id = "streamAnomalies";
+  anomalyBody.style.display = "block";
+  renderAnomalies(anomalyBody);
+  const [fault, faultBody] = block("配送障害のシミュレーション", "", false);
+  renderObject(faultBody, deref(root.properties.faults, root), spec.faults, root);
+  body.append(common, parameters, attrs, bodyOptions, anomaly, fault);
+  target.append(advanced);
+}
+
+// 編集入力が無効でも、進行中のプレビューを旧条件のまま表示しない。
+function invalidatePreview() {
+  state.specRevision++;
+  state.previewedDestination = null;
+  $("#previewPanel").hidden = true;
+}
+
+// 先頭に4つの操作例を並べ、クリックは設定の差し替えだけに限定する。
+function renderQuickstart() {
+  $("#quickstart").hidden = state.info.kind !== "stream";
+  if (state.info.kind !== "stream") return;
+  const target = $("#quickstartChoices");
+  for (const [id, [name]] of Object.entries(streamScenarios)) {
+    const button = el("button", { type: "button" }, name);
+    button.addEventListener("click", () => {
+      const next = "event-" + Date.now().toString(36) + "-" +
+        crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+      state.spec = scenarioSpec(id, state.info.defaults, state.spec.connection_id, next);
+      renderRun();
+      notify(name + "を選択しました。接続先とトピックを確認してから送信してください。");
+    });
+    target.append(button);
+  }
+}
+
 // 共通条件・生成列・出力方式・異常条件を、現在のサービスと設定に合わせて再描画する。
 function renderRun() {
   const root = state.schemas.run,
     target = $("#runEditor");
   target.replaceChildren();
+  invalidatePreview();
+  if (state.info.kind === "stream") return renderStreamRun(root, target);
   const [common, body] = block(
     "01 / 実行条件",
     "生成量と速度、再現性を決めます。接続は保存済みのプロファイルを選択します。",
@@ -445,6 +603,7 @@ function renderFields(parent) {
       const b = el("button", { type: "button", "data-help": help }, label);
       b.addEventListener("click", /* カード操作後に一覧を作り直し、変更後の位置で次の操作を受け付ける。 */ () => {
         fn();
+        invalidatePreview();
         renderFields(parent);
       });
       buttons.append(b);
@@ -464,13 +623,14 @@ function renderFields(parent) {
   const add = el(
     "button",
     { type: "button", id: "addField" },
-    "＋ データ項目を追加",
+    "＋ イベント属性を追加",
   );
   add.addEventListener("click", /* スキーマ既定値から例示用の項目を末尾に追加し、一覧を再描画する。 */ () => {
     const value = defaultValue(schema, root);
     value.name = "custom_" + (state.spec.fields.length + 1);
     value.value = "sample";
     state.spec.fields.push(value);
+    invalidatePreview();
     renderFields(parent);
   });
   parent.append(add);
@@ -487,6 +647,7 @@ function renderAnomalies(parent) {
     const remove = el("button", { type: "button" }, "削除");
     remove.addEventListener("click", /* 選択した位置の異常ルールを削除し、見出しの番号を振り直す。 */ () => {
       state.spec.anomalies.splice(index, 1);
+      invalidatePreview();
       renderAnomalies(parent);
     });
     head.append(remove);
@@ -511,6 +672,7 @@ function renderAnomalies(parent) {
     value.from_row = 20;
     value.to_row = 39;
     state.spec.anomalies.push(value);
+    invalidatePreview();
     renderAnomalies(parent);
   });
   parent.append(add);
@@ -531,6 +693,77 @@ function runSpec() {
   validateForm("#runForm");
   return clone(state.spec);
 }
+// 属性や異常ルールの配列順も含め、送るJSON全体を比較する。
+function canonicalRunSpec(spec) {
+  return JSON.stringify(spec, (_key, value) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, value[key]]))
+      : value,
+  );
+}
+
+// ブラウザーが表示している配信先の版をリクエストに結び付ける。
+function streamActionSnapshot() {
+  const spec = runSpec();
+  const profile = state.connections.find((item) => item.id === spec.connection_id);
+  if (!profile || !Number.isSafeInteger(profile.revision) || profile.revision < 1)
+    throw new Error("保存済みの配信先を選んでください。");
+  spec.connection_revision = profile.revision;
+  return {
+    spec,
+    version: state.specRevision,
+    signature: canonicalRunSpec(spec),
+    headers: { "X-Expected-Connection-Revision": String(profile.revision) },
+  };
+}
+
+// 編集や接続の版変更があれば、古いプレビューを送信の承認として使わない。
+function isPreviewCurrent(snapshot) {
+  return sameStreamSnapshot(state.previewedDestination, snapshot);
+}
+
+// 両方の経路で同じ判定を使い、変更通知を取りこぼしても送信しない。
+function sameStreamSnapshot(expected, current) {
+  return expected?.version === current.version && expected.signature === current.signature;
+}
+
+// サーバー側で接続先が変わった場合は再取得するだけで、自動再送はしない。
+async function guardedStreamAction(path, snapshot, send = api, refresh = refreshConnections) {
+  try {
+    return await send(path, snapshot.spec, snapshot.headers);
+  } catch (error) {
+    if (error.status !== 409) throw error;
+    invalidatePreview();
+    try {
+      await refresh();
+    } catch {
+      throw new Error("配信先を再取得できません。接続先を確認し、プレビューし直してください。");
+    }
+    throw new Error("配信先が更新されました。表示された接続先を確認し、プレビューし直してください。");
+  }
+}
+
+// 最新条件と一致するプレビュー応答だけを表示・保存する。
+async function previewStream() {
+  const snapshot = streamActionSnapshot();
+  const data = await guardedStreamAction("/api/preview", snapshot);
+  // 入力イベントを取りこぼした変更や編集中の無効な値でも旧結果を表示しない。
+  if (snapshot.version !== state.specRevision ||
+      data.connection_revision !== snapshot.spec.connection_revision) return;
+  const latest = streamActionSnapshot();
+  if (!sameStreamSnapshot(snapshot, latest)) return;
+  previewResult(data);
+  state.previewedDestination = snapshot;
+}
+
+// 明示的な押下でも、表示済みの本文と同じ条件でなければ送信しない。
+async function startStream() {
+  const snapshot = streamActionSnapshot();
+  if (!isPreviewCurrent(snapshot))
+    throw new Error("現在の配信先と条件でプレビューしてから送信してください。");
+  return guardedStreamAction("/api/runs", snapshot);
+}
+
 const fieldsByKind = {
   sqlserver: ["host", "port", "database", "username", "password", "ssl_mode"],
   oracle: [
@@ -1001,6 +1234,18 @@ function previewResult(data) {
   $("#previewPanel .badge").hidden = data.writes !== false;
   $("#previewNote").textContent = data.note || "接続先の処理結果";
   $("#previewJson").textContent = JSON.stringify(data, null, 2);
+  const messages = $("#previewMessages");
+  messages.replaceChildren();
+  for (const message of data.stream_messages?.slice(0, 3) ?? []) {
+    const sample = el("div", { class: "message-sample" });
+    sample.append(
+      el("h4", {}, "メッセージ " + message.sequence + " · " + message.bytes + " B"),
+      el("p", {}, "トピック: " + (message.topic || "接続先の既定値（未確認）") +
+        (message.duplicate ? " · 同じ本文を1回追加送信" : "")),
+      el("pre", {}, JSON.stringify(JSON.parse(message.payload), null, 2)),
+    );
+    messages.append(sample);
+  }
   const area = $("#previewTable");
   area.replaceChildren();
   if (data.records?.length) {
@@ -1240,10 +1485,13 @@ async function init() {
   ]);
   state.spec = clone(state.info.defaults);
   $("#title").textContent = state.info.title;
-  document.title = state.info.title + " · Data Source Studio";
+  document.title = state.info.title + " · Factory Stream Simulator";
   $("#health").textContent = "ONLINE · " + state.info.kind.toUpperCase();
   await Promise.all([refreshConnections(), refreshPresets()]);
   editConnection(state.connections[0]);
+  renderQuickstart();
+  for (const event of ["input", "change"])
+    $("#runForm").addEventListener(event, invalidatePreview);
   $("#sqlActions").hidden = state.info.kind !== "sql";
   $("#outboxPanel").hidden = state.info.kind !== "stream";
   $("#destinationAdvice").textContent =
@@ -1327,13 +1575,19 @@ async function init() {
       notify(err.message, true);
     }
   });
-  action("#preview", /* 現在のフォームを検証してプレビューに送り、生成開始とは区別して結果だけを表示する。 */ async () =>
-    previewResult(await api("/api/preview", runSpec())),
-  );
-  action("#start", /* 検証済み設定で生成を開始し、返された実行IDを保持して表示を更新する。 */ async () => {
-    const run = await api("/api/runs", runSpec());
+  action("#preview", async () => {
+    if (state.info.kind !== "stream") {
+      previewResult(await api("/api/preview", runSpec()));
+      return;
+    }
+    await previewStream();
+  });
+  action("#start", async () => {
+    const run = state.info.kind === "stream"
+      ? await startStream()
+      : await api("/api/runs", runSpec());
     state.current = run.id;
-    notify("生成を開始しました。実行ID: " + run.id);
+    notify("送信を受け付けました。実行ID: " + run.id);
     await refreshHistory();
   });
   for (const [id, path] of [

@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,10 +33,10 @@ from generation import (
     map_json,
     record_key,
     sample_offsets,
-    stream_payload,
     validate_generation,
 )
 from storage import ConfigStore
+from stream_events import build_events, check_stream_profile, check_stream_topic
 
 CONTRACT_VERSION = "source.preset.v2"
 
@@ -528,6 +528,20 @@ def create_app(kind, title, adapter):
             raise HTTPException(422, "このツールでは使用できない接続方式です")
         return value, version
 
+    def resolve_stream_destination(spec, expected_revision):
+        """ブラウザー指定時にだけ現行版と照合し、同じ接続情報を確定する。"""
+        if expected_revision is None:
+            return profile(spec.connection_id, spec.connection_revision)
+        try:
+            selected, current = profile(spec.connection_id)
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                raise HTTPException(409, "接続先が変更されました。再確認してください") from None
+            raise
+        if current != expected_revision or spec.connection_revision != expected_revision:
+            raise HTTPException(409, "接続先が変更されました。再確認してください")
+        return selected, current
+
     # 読解 create_app.checked: 生成条件を代表位置で検証し、ツール違いの再送・ファイル破損指定を拒否する。
     # 利用者向け生成例外以外の型エラー詳細は一般化して422を返す。全行保証ではない。
     def checked(spec):
@@ -718,7 +732,9 @@ def create_app(kind, title, adapter):
     # 読解 create_app.preview: 先頭と異常境界を含む最大12位置を生成し、本文・異常hit・推定値を返す。
     # 接続・書込み・送信は行わない。表示サンプルの成功を全行や下流成功と扱わない。
     @app.post("/api/preview")
-    def preview(spec: RunSpec):
+    def preview(spec: RunSpec, expected_revision: int | None = Header(
+            default=None, alias="X-Expected-Connection-Revision", ge=1
+        )):
         checked(spec)
         offsets = sorted(set(list(range(min(3, spec.rows))) + sample_offsets(spec)))[
             :12
@@ -732,23 +748,42 @@ def create_app(kind, title, adapter):
             )
             anomaly_hits.append(hits)
         payloads = []
+        messages = []
+        target = None
+        revision = None
+        if kind == "stream":
+            try:
+                target, revision = resolve_stream_destination(spec, expected_revision)
+            except HTTPException as exc:
+                # 未登録の接続先を参照する設定も、本文はローカルで確認できる。
+                if exc.status_code != 404:
+                    raise
         for i, row in enumerate(records):
             meta = {
                 "record_key": record_key(spec, spec.start_sequence + offsets[i]),
                 "sequence": spec.start_sequence + offsets[i],
                 "run_key": spec.run_key,
             }
-            template = (
-                spec.stream.payload_template
-                if kind == "stream"
-                else spec.files.json_template
-            )
             try:
-                payload = (
-                    stream_payload(spec, row, spec.start_sequence + offsets[i])
-                    if kind == "stream"
-                    else map_json(template, row, spec.parameters, meta)
-                )
+                if kind == "stream":
+                    if target:
+                        check_stream_profile(spec, target.kind)
+                    items = build_events(
+                        spec, row, spec.start_sequence + offsets[i],
+                        target.topic if target else None,
+                    )
+                    if target:
+                        check_stream_topic(target.kind, items[0]["topic"])
+                    payload = json.loads(items[0]["payload"])
+                    messages.append({
+                        "sequence": spec.start_sequence + offsets[i],
+                        "topic": items[0]["topic"],
+                        "payload": items[0]["payload"],
+                        "bytes": len(items[0]["payload"].encode("utf-8")),
+                        "duplicate": len(items) > 1,
+                    })
+                else:
+                    payload = map_json(spec.files.json_template, row, spec.parameters, meta)
             except GenerationError as exc:
                 raise HTTPException(422, str(exc)) from None
             payloads.append(payload)
@@ -759,9 +794,18 @@ def create_app(kind, title, adapter):
             "writes": False,
             "records": records,
             "json_payloads": payloads,
+            **(
+                {"stream_messages": messages, "connection_revision": revision}
+                if kind == "stream"
+                else {}
+            ),
             "rows": spec.rows,
             "effective_batch_limit": batch_limit(spec, spec.batch_size),
-            "estimated_seconds": round(spec.rows / spec.target_rate, 2)
+            "estimated_seconds": round(
+                spec.rows * (1 + spec.stream.duplicate_rate if kind == "stream" else 1)
+                / spec.target_rate,
+                2,
+            )
             if spec.target_rate
             else None,
             "note": "プレビューでは接続・書き込み・送信しません。正常位置と異常条件の開始位置を含むサンプルを表示します。目標速度は性能保証ではありません。",
@@ -770,9 +814,15 @@ def create_app(kind, title, adapter):
     # 読解 create_app.start: 条件と接続を確認し、その時点のリビジョンへ固定して非同期実行を開始する。
     # HTTP 202は受付であり、生成や配送の完了を意味しない。
     @app.post("/api/runs", status_code=202)
-    def start(spec: RunSpec):
+    def start(spec: RunSpec, expected_revision: int | None = Header(
+            default=None, alias="X-Expected-Connection-Revision", ge=1
+        )):
         checked(spec)
-        _, revision = profile(spec.connection_id, spec.connection_revision)
+        if kind == "stream":
+            selected, revision = resolve_stream_destination(spec, expected_revision)
+            safe_call(check_stream_profile, spec, selected.kind)
+        else:
+            _, revision = profile(spec.connection_id, spec.connection_revision)
         return runtime.start(spec.model_copy(update={"connection_revision": revision}))
 
     # 読解 create_app.runs: 実行履歴の一覧を返す。稼働状態の取得だけで新しいジョブを作らない。
