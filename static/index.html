@@ -3,7 +3,7 @@
   <!-- 読解: 文字コード・表示幅・共通CSSと遅延実行JSを宣言する。本文の設定値や認証情報はここへ埋め込まない。 --><head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Data Source Studio</title>
+    <title>Factory Stream Simulator</title>
     <link rel="stylesheet" href="/static/style.css" />
     <script src="/static/app.js" defer></script>
   </head>
@@ -11,10 +11,10 @@
     <!-- 読解: ツール名と接続表示の領域。health表示はブラウザーが取得した状態で更新する。 --><header>
       <div>
         <span class="eyebrow"
-          >DATA SOURCE STUDIO <span class="version">v0.2</span></span
+          >FACTORY STREAM SIMULATOR <span class="version">v0.2</span></span
         >
-        <h1 id="title">データ生成スタジオ</h1>
-        <p id="subtitle">接続・データ定義・実行条件を、自分の仕様に。</p>
+        <h1 id="title">イベント送信シミュレーター</h1>
+        <p id="subtitle">設備・センサー・工程イベントを生成し、MQTTブローカーへ送信するシミュレーターです。Kafka、NATS、IoT基盤、ストリーム処理、リアルタイム分析の検証にも利用できます。</p>
       </div>
       <span id="health" class="badge">接続中</span>
     </header>
@@ -22,7 +22,7 @@
       <!-- 読解: data-tabと画面IDの対応で切り替えるナビと説明欄。実処理の開始とは分離する。 --><aside>
         <nav aria-label="メインメニュー">
           <button class="nav active" data-tab="generate">
-            01 <span>データをつくる</span></button
+            01 <span>イベントを送る</span></button
           ><button class="nav" data-tab="connections">
             02 <span>接続先</span></button
           ><button class="nav" data-tab="presets">
@@ -45,11 +45,18 @@
         <!-- 読解: プリセット読込み・動的生成条件・プレビュー・実行受付をまとめる。プレビューと投入を別ボタンにする。 --><section id="generate" class="tab active">
           <div class="section-head">
             <div>
-              <span class="eyebrow">GENERATOR</span>
-              <h2>データをつくる</h2>
+              <span class="eyebrow">EVENT STREAM</span>
+              <h2>イベントを送る</h2>
             </div>
-            <span class="muted">業種を選ばず、項目から定義</span>
+            <span class="muted">イベントを選ぶ → 接続と送信条件 → 確認 → 送信</span>
           </div>
+          <div id="quickstart" class="card" hidden>
+            <h3>01 / どんなイベントを流しますか？</h3>
+            <p class="muted">選択すると合成イベントの設定を読み込みます。接続先は維持し、まだ送信しません。</p>
+            <div id="quickstartChoices" class="quickstart-grid"></div>
+          </div>
+          <details class="card">
+            <summary>保存済みプリセットから始める</summary>
           <div class="toolbar card">
             <label
               class="compact hint"
@@ -59,7 +66,8 @@
             ><button id="resetRun" class="ghost">初期値</button
             ><button id="toPreset" class="ghost">この設定を保存…</button>
           </div>
-          <p id="presetDetails" class="note" aria-live="polite"></p>
+            <p id="presetDetails" class="note" aria-live="polite"></p>
+          </details>
           <!-- 読解: スキーマからJavaScriptが生成欄を構築する空の受け皿。既定のブラウザー送信ではなく操作関数で検証する。 --><form id="runForm" novalidate><div id="runEditor"></div></form>
           <div class="actionbar">
             <button
@@ -67,13 +75,13 @@
               class="secondary"
               data-help="正常位置と異常位置から最大12件を生成します。接続先への通信・書き込み・送信はありません。"
             >
-              プレビュー</button
+              03 / プレビュー</button
             ><button
               id="start"
               class="primary"
               data-help="現在の設定と接続プロファイルの版を固定して実行します。"
             >
-              生成を開始</button
+              04 / 送信を開始</button
             ><span class="muted">実行は各ツール1件ずつ</span>
           </div>
           <!-- 読解: SQLツールだけで表示する表検査・DDL表示・表準備。表示だけの操作とDDL実行を区別する。 --><div id="sqlActions" class="toolbar card" hidden>
@@ -89,9 +97,10 @@
           <!-- 読解: 代表サンプルとJSONを表示する領域。ここでの表示成功は全件・下流到達の保証ではない。 --><div id="previewPanel" class="card" hidden>
             <h3>プレビュー <span class="badge">書き込みなし</span></h3>
             <p id="previewNote"></p>
+            <div id="previewMessages"></div>
             <div id="previewTable" class="table-scroll"></div>
             <details>
-              <summary>出力JSON / 処理結果</summary>
+              <summary>詳しいプレビュー情報</summary>
               <pre id="previewJson"></pre>
             </details>
           </div>

@@ -139,6 +139,14 @@ HELP = {
         "Content-Type 上書き",
         "空欄ならJSONはapplication/json、NDJSONはapplication/x-ndjson。受信側が専用のMIME型を要求する場合に設定します。",
     ),
+    "message_size_bytes": (
+        "本文サイズの下限 (B)",
+        "MQTT・ローカル記録用。JSONの末尾を空白で補います。0は無調整、上限64 KiB。元の本文は切り詰めません。",
+    ),
+    "duplicate_rate": (
+        "重複率 (0〜1)",
+        "同じ本文・トピックで1回追加送信する確率。1なら送信数は元の2倍です。",
+    ),
     "delivery_attempts": (
         "1バッチの送信試行数",
         "1〜10回。失敗したバッチは永続outboxに残ります。受信済みでも応答が失われた場合は重複し得るためrecord_keyを使います。",

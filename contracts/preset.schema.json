@@ -873,6 +873,22 @@
           "title": "送信本文のJSON構造",
           "description": "nullなら生成行。例: {\"device\":\"$row.entity_id\",\"values\":[\"$row.value\"],\"source\":\"$parameters.site\"}。配列やスカラーならメタデータ追加を無効にします。"
         },
+        "message_size_bytes": {
+          "default": 0,
+          "maximum": 65536,
+          "minimum": 0,
+          "title": "本文サイズの下限 (B)",
+          "type": "integer",
+          "description": "MQTT・ローカル記録用。JSONの末尾を空白で補います。0は無調整、上限64 KiB。元の本文は切り詰めません。"
+        },
+        "duplicate_rate": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "重複率 (0〜1)",
+          "type": "number",
+          "description": "同じ本文・トピックで1回追加送信する確率。1なら送信数は元の2倍です。"
+        },
         "delivery_attempts": {
           "anyOf": [
             {

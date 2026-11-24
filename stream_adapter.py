@@ -24,18 +24,16 @@ from urllib.request import (
     build_opener,
 )
 
-from stream_connections import TRANSPORTS, validate_topic
+from stream_connections import TRANSPORTS
 from connection_security import tls_context
 from generation import (
     GenerationError,
     batch_limit,
-    encode_json,
     generate_record,
     inject_fault,
-    record_key,
-    stream_payload,
-    render,
 )
+
+from stream_events import build_events, check_stream_profile, check_stream_topic
 
 
 @contextmanager
@@ -386,6 +384,7 @@ def deliver(profile, sender, entries, ctx, batch_number=1):
 
 def handle(spec, ctx, profile, store):
     """生成した本文を先に保存し、記録専用モード以外では配送する。"""
+    check_stream_profile(spec, profile.kind)
     overrides = {
         name: getattr(spec.stream, name)
         for name in ["delivery_attempts", "retry_backoff_ms"]
@@ -395,10 +394,15 @@ def handle(spec, ctx, profile, store):
         profile = profile.model_copy(update=overrides)
     sender = None
     size = 0
+    paced = 0
     step = batch_limit(
         spec,
         min(spec.batch_size, spec.target_rate) if spec.target_rate else spec.batch_size,
     )
+    if spec.stream.message_size_bytes:
+        step = min(step, max(1, 4 * 1024 * 1024 // spec.stream.message_size_bytes))
+    if spec.stream.duplicate_rate:
+        step = max(1, step // 2)
     try:
         for offset in range(0, spec.rows, step):
             ctx.check()
@@ -407,36 +411,10 @@ def handle(spec, ctx, profile, store):
             for i in range(count):
                 sequence = spec.start_sequence + offset + i
                 row = generate_record(spec, sequence)
-                key = record_key(spec, sequence)
-                payload = stream_payload(spec, row, sequence)
-                topic = (
-                    render(
-                        spec.stream.topic_template,
-                        {
-                            **spec.parameters,
-                            **row,
-                            "sequence": sequence,
-                            "record_id": key,
-                        },
-                    )
-                    if spec.stream.topic_template
-                    else profile.topic
-                )
-                if profile.kind == "mqtt" and (
-                    not topic
-                    or len(topic) > 512
-                    or any(c in topic for c in "#+\x00\n\r")
-                ):
-                    raise GenerationError("送信用トピックが不正です")
-                validate_topic(profile.kind, topic)
-                entries.append(
-                    {
-                        "record_key": key,
-                        "payload": encode_json(payload),
-                        "topic": topic,
-                        "body_mode": spec.stream.http_body,
-                    }
-                )
+                events = build_events(spec, row, sequence, profile.topic)
+                topic = events[0]["topic"]
+                check_stream_topic(profile.kind, topic)
+                entries.extend(events)
             size += sum(len(e["payload"].encode()) for e in entries)
             if size > spec.max_output_mb * 1024 * 1024:
                 raise RuntimeError("run_size_limit")
@@ -461,8 +439,9 @@ def handle(spec, ctx, profile, store):
                 commits=1,
                 bytes_written=sum(len(e["payload"].encode()) for e in entries),
             )
+            paced += len(entries)
             if offset + count < spec.rows:
-                ctx.pace(offset + count)
+                ctx.pace(paced)
     finally:
         if sender:
             sender.close()
