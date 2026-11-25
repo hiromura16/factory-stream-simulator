@@ -664,22 +664,24 @@ function renderAnomalies(parent) {
   parent.append(add);
 }
 // ブラウザーの入力制約を検査し、不正欄の折りたたみを開いて理由を表示し処理を中断する。
-function validateForm(selector) {
+function validateForm(selector, showError = true) {
   const form = $(selector);
   for (const input of form.querySelectorAll("input,textarea,select")) {
     if (!input.checkValidity()) {
-      for (let details = input.closest("details"); details;
-        details = details.parentElement.closest("details")) {
-        details.open = true;
+      if (showError) {
+        for (let details = input.closest("details"); details;
+          details = details.parentElement.closest("details")) {
+          details.open = true;
+        }
+        input.reportValidity();
       }
-      input.reportValidity();
       throw new Error("入力内容を確認してください。");
     }
   }
 }
 // フォームを検証した後に現在の実行設定を複製して返す。送信側の加工は編集中モデルから分離する。
-function runSpec() {
-  validateForm("#runForm");
+function runSpec(showError = true) {
+  validateForm("#runForm", showError);
   return clone(state.spec);
 }
 // 属性や異常ルールの配列順も含め、送るJSON全体を比較する。
@@ -1480,6 +1482,20 @@ async function init() {
   $("#health").textContent = "ONLINE · " + state.info.kind.toUpperCase();
   await Promise.all([refreshConnections(), refreshPresets()]);
   editConnection(state.connections[0]);
+  window.FactoryComparison.mount({
+    app: "stream-simulator",
+    listPresets: () => state.presets,
+    currentSpec: () => runSpec(false),
+    preview: (candidate) => api("/api/preview", candidate),
+    metrics: (spec, data) => ({
+      "元イベントの件数": spec.rows,
+      "本文サイズの下限（B）": spec.stream.message_size_bytes ?? null,
+      "見本の最大サイズ（B）": data.stream_messages?.length ? Math.max(...data.stream_messages.map((row) => row.bytes)) : null,
+      "重複率": spec.stream.duplicate_rate ?? null,
+      "重複する見本の数": data.stream_messages?.filter((row) => row.duplicate).length ?? null,
+      "目標件数（件／秒）": spec.target_rate,
+    }),
+  });
   renderQuickstart();
   for (const event of ["input", "change"])
     $("#runForm").addEventListener(event, invalidatePreview);

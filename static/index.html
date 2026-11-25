@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Factory Stream Simulator</title>
     <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/comparison.js" defer></script>
     <script src="/static/app.js" defer></script>
   </head>
   <body>
@@ -27,6 +28,7 @@
           ><button class="nav" data-tab="history">
             <span>実行履歴</span>
           </button>
+          <button class="nav" type="button" data-tab="comparison">見本を比較</button>
         </nav>
         <div class="aside-note">
           <strong>入力項目の説明</strong>
@@ -246,6 +248,58 @@
             </p>
           </div>
           <div id="historyList"></div>
+        </section>
+        <section id="comparison" class="tab" aria-labelledby="comparisonTitle">
+          <h2 id="comparisonTitle">見本を比較</h2>
+          <p class="muted">イベント数、本文サイズ、重複率を比べます。 ここではファイル出力、DBへの書き込み、配信を行いません。</p>
+          <section class="card" aria-labelledby="comparisonCatalogTitle">
+            <h3 id="comparisonCatalogTitle">ひな型を探す</h3>
+            <div class="comparison-controls">
+              <label class="comparison-search" for="comparisonSearch">
+                名前・ID・用途
+                <input id="comparisonSearch" type="search" placeholder="例：正常、異常、設備" />
+              </label>
+              <label class="comparison-check">
+                <input id="comparisonFavoritesOnly" type="checkbox" />
+                お気に入りのみ
+              </label>
+            </div>
+            <p id="comparisonMatches" class="muted" aria-live="polite"></p>
+            <ul id="comparisonCatalog" class="comparison-catalog" aria-label="比較に選べるひな型"></ul>
+          </section>
+          <section class="card" aria-labelledby="comparisonRunTitle">
+            <h3 id="comparisonRunTitle">比較する条件</h3>
+            <label class="comparison-check">
+              <input id="comparisonCurrent" type="checkbox" />
+              編集中の設定を含める
+            </label>
+            <p id="comparisonCount" class="muted"></p>
+            <ul id="comparisonSelection" class="comparison-selection" aria-label="選んだひな型"></ul>
+            <div class="comparison-actions">
+              <button id="comparisonRun" type="button" class="primary" disabled>見本を比較</button>
+              <button id="comparisonClear" type="button" disabled>選択を解除</button>
+              <button id="comparisonStop" type="button" hidden>残りを中止</button>
+            </div>
+            <p id="comparisonStatus" class="muted" role="status"></p>
+          </section>
+          <section id="comparisonResults" class="card" aria-labelledby="comparisonResultsTitle" hidden>
+            <h3 id="comparisonResultsTitle">比較結果</h3>
+            <p class="muted">プレビュー時点の設定と見本の集計です。実行時の性能・到達・書き込みは別途確認します。</p>
+            <div class="comparison-controls">
+              <label class="comparison-check">
+                <input id="comparisonDifferences" type="checkbox" />
+                差がある項目だけ
+              </label>
+              <div class="comparison-actions">
+                <button id="comparisonCSV" type="button">CSVを保存</button>
+                <button id="comparisonJSON" type="button">JSONを保存</button>
+              </div>
+            </div>
+            <p id="comparisonDelta" class="muted" aria-live="polite"></p>
+            <div class="comparison-table" tabindex="0" role="region" aria-label="比較結果の表">
+              <table><thead></thead><tbody></tbody></table>
+            </div>
+          </section>
         </section>
       </main>
     </div>

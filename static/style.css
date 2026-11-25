@@ -661,3 +661,103 @@ header > .badge {
   grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
   gap: 12px 18px;
 }
+
+/* ひな型カタログとプレビュー比較 */
+#comparison[hidden],
+#comparison [hidden] {
+  display: none;
+}
+.comparison-controls,
+.comparison-actions,
+.comparison-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.comparison-search {
+  flex: 1 1 230px;
+  min-width: 0;
+}
+.comparison-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.comparison-check input,
+.comparison-catalog input {
+  width: auto;
+  min-width: 1rem;
+  flex: 0 0 auto;
+  accent-color: #76dacc;
+}
+.comparison-catalog,
+.comparison-selection {
+  list-style: none;
+  margin: 8px 0 14px;
+  padding: 0;
+}
+.comparison-catalog {
+  max-height: 23rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.comparison-catalog > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+  border-top: 1px solid var(--line, #37525f);
+  padding: 10px 2px;
+  overflow-wrap: anywhere;
+}
+.comparison-catalog label {
+  flex: 1 1 230px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.comparison-catalog label > span {
+  min-width: 0;
+}
+.comparison-catalog small,
+.comparison-table small,
+.comparison-scenario {
+  display: block;
+  color: var(--muted, #a9bcc7);
+}
+.comparison-scenario {
+  margin-top: 4px;
+}
+.comparison-catalog button,
+.comparison-actions button {
+  max-width: 100%;
+  white-space: normal;
+}
+.comparison-catalog button[aria-pressed="true"],
+.comparison-selection li {
+  border: 1px solid #66b4ac;
+  border-radius: 8px;
+  background: rgba(59, 178, 160, 0.15);
+}
+.comparison-selection li {
+  padding: 4px 8px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
+}
+.comparison-table {
+  overflow: auto;
+  margin-top: 14px;
+}
+.comparison-table table {
+  min-width: 480px;
+}
+.comparison-table th {
+  min-width: 128px;
+  overflow-wrap: anywhere;
+}
+.comparison-table .comparison-changed {
+  background: rgba(59, 178, 160, 0.14);
+}
