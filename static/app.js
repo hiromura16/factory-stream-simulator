@@ -13,6 +13,12 @@ const streamScenarios = {
   process: ["工程進捗イベント", "PROCESS01", "IN_PROGRESS", "DELAYED", "progress_pct", 42],
   alarm: ["アラームイベント", "ALARM01", "WARNING", "CRITICAL", "severity", 2],
 };
+const scenarioDescriptions = {
+  equipment: "設備のデータを収集する場面です。稼働中（RUN）の状態と計測値を持つメッセージを作ります。",
+  temperature: "温度測定を収集する場面です。センサーIDと摂氏温度を持つメッセージを作ります。",
+  process: "製造工程の進み具合を集める場面です。工程の状態と進捗率を持つメッセージを作ります。",
+  alarm: "設備の警報を監視する場面です。警告（WARNING）を基本とし、一部を重大（CRITICAL）に置き換えます。",
+};
 const quickAnomaly = "クイックスタートの異常";
 
 const state = {
@@ -331,7 +337,7 @@ function scenarioSpec(id, defaults, connection, runKey, at = new Date().toISOStr
     name, run_key: runKey, rows: 30, target_rate: 5,
     batch_size: 5, connection_id: connection, connection_revision: null,
     parameters: { ...spec.parameters, start_time: at },
-    description: "合成イベント30件の試し送信。接続先とトピックを確認してください。",
+    description: scenarioDescriptions[id] + "\n\n合成イベント30件。送信前に接続先、トピック、本文を確認します。",
     fields: [
       { name: "entity_id", generator: "constant", value: entity },
       { name: "status", generator: "constant", value: status },
@@ -437,6 +443,7 @@ function renderQuickstart() {
         crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
       state.spec = scenarioSpec(id, state.info.defaults, state.spec.connection_id, next);
       renderRun();
+      $("#quickstartScenario").textContent = scenarioDescriptions[id];
       notify(name + "を選択しました。接続先とトピックを確認してから送信してください。");
     });
     target.append(button);
@@ -657,22 +664,24 @@ function renderAnomalies(parent) {
   parent.append(add);
 }
 // ブラウザーの入力制約を検査し、不正欄の折りたたみを開いて理由を表示し処理を中断する。
-function validateForm(selector) {
+function validateForm(selector, showError = true) {
   const form = $(selector);
   for (const input of form.querySelectorAll("input,textarea,select")) {
     if (!input.checkValidity()) {
-      for (let details = input.closest("details"); details;
-        details = details.parentElement.closest("details")) {
-        details.open = true;
+      if (showError) {
+        for (let details = input.closest("details"); details;
+          details = details.parentElement.closest("details")) {
+          details.open = true;
+        }
+        input.reportValidity();
       }
-      input.reportValidity();
       throw new Error("入力内容を確認してください。");
     }
   }
 }
 // フォームを検証した後に現在の実行設定を複製して返す。送信側の加工は編集中モデルから分離する。
-function runSpec() {
-  validateForm("#runForm");
+function runSpec(showError = true) {
+  validateForm("#runForm", showError);
   return clone(state.spec);
 }
 // 属性や異常ルールの配列順も含め、送るJSON全体を比較する。
@@ -1172,8 +1181,11 @@ async function refreshConnections() {
 // 今選ばれたプリセットの説明を反映し、なければ編集方法の案内を表示する。
 function updatePresetDetails() {
   const item = state.presets.find(/* 選択欄の値と一致するプリセットを、表示名ではなくIDで探す。 */ (p) => p.id === $("#presetSelect").value);
-  $("#presetDetails").textContent =
-    item?.spec.description || "各設定は読み込み後に自由に変更できます。";
+  const parts = (item?.spec.description || "").trim().split(/\r?\n\s*\r?\n/);
+  const scenario = parts.shift()?.replace(/^【想定(?:する状況)?】\s*/, "").trim();
+  $("#presetScenario").textContent = scenario || "このひな型には状況の説明がありません。";
+  $("#presetDetails").textContent = parts.join("\n\n");
+  $("#presetDetailsPanel").hidden = parts.length === 0;
 }
 // 最新のプリセット一覧を取得し、存在する限り以前の選択を保つ。
 async function refreshPresets() {
@@ -1195,8 +1207,7 @@ function showJson() {
   $("#presetJson").value = JSON.stringify(v, null, 2);
 }
 // 入力欄のJSONを解析し、プレビューAPIが検証した設定を返す。構文・検証失敗は呼出側へ伝える。
-async function parsePreset() {
-  const parsed = JSON.parse($("#presetJson").value);
+async function parsePreset(parsed = JSON.parse($("#presetJson").value)) {
   return (await api("/api/preview", parsed)).validated_spec;
 }
 // 値を整形JSONとしてブラウザーからダウンロードし、不要になったオブジェクトURLを解放する。
@@ -1471,6 +1482,20 @@ async function init() {
   $("#health").textContent = "ONLINE · " + state.info.kind.toUpperCase();
   await Promise.all([refreshConnections(), refreshPresets()]);
   editConnection(state.connections[0]);
+  window.FactoryComparison.mount({
+    app: "stream-simulator",
+    listPresets: () => state.presets,
+    currentSpec: () => runSpec(false),
+    preview: (candidate) => api("/api/preview", candidate),
+    metrics: (spec, data) => ({
+      "元イベントの件数": spec.rows,
+      "本文サイズの下限（B）": spec.stream.message_size_bytes ?? null,
+      "見本の最大サイズ（B）": data.stream_messages?.length ? Math.max(...data.stream_messages.map((row) => row.bytes)) : null,
+      "重複率": spec.stream.duplicate_rate ?? null,
+      "重複する見本の数": data.stream_messages?.filter((row) => row.duplicate).length ?? null,
+      "目標件数（件／秒）": spec.target_rate,
+    }),
+  });
   renderQuickstart();
   for (const event of ["input", "change"])
     $("#runForm").addEventListener(event, invalidatePreview);
@@ -1507,7 +1532,11 @@ async function init() {
   });
   action("#toPreset", /* 現在のフォームからプリセット用JSONを用意し、プリセット画面を開く。 */ () => {
     showJson();
+    $("#presetId").value = "";
+    $("#presetDisplayName").value = "";
+    $("#presetPurpose").value = "";
     tab("presets");
+    $("#presetId").focus();
   });
   action("#refreshJson", /* 表示中のJSONを現在のフォームの検証済み設定で更新する。 */ () => {
     showJson();
@@ -1525,12 +1554,19 @@ async function init() {
       throw new Error(
         "プリセットIDを英数字・下線・ハイフンで指定してください。",
       );
-    const spec = await parsePreset();
+    const draft = JSON.parse($("#presetJson").value);
+    const displayName = $("#presetDisplayName").value.trim();
+    const purpose = $("#presetPurpose").value.trim();
+    if (displayName) draft.name = displayName;
+    if (purpose) draft.description = purpose;
+    const spec = await parsePreset(draft);
     await api("/api/presets/" + id, spec);
+    $("#presetJson").value = JSON.stringify(spec, null, 2);
     state.spec = spec;
     renderRun();
     await refreshPresets();
     $("#presetSelect").value = id;
+    updatePresetDetails();
     notify("プリセット " + id + " を保存しました。");
   });
   action("#exportPreset", /* JSONを検証してからダウンロードし、空の名前には既定値を使う。 */ async () =>
