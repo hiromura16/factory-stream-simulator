@@ -27,10 +27,25 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("peers", nargs="*", type=Path)
     args = parser.parse_args()
-    manifest = json.loads((ROOT / "docs/shared-components.json").read_text())
+    repos = [ROOT, *args.peers]
     failures = []
-    for repo in [ROOT, *args.peers]:
-        failures.extend(f"{repo.name}/{name}" for name in check(repo, manifest))
+    groups = {
+        "shared-components.json": repos,
+        "shared-studio-components.json": [repo for repo in repos if (repo / "studio.py").is_file()],
+    }
+    for filename, members in groups.items():
+        canonical = None
+        for repo in members:
+            manifest_path = repo / "docs" / filename
+            if not manifest_path.is_file():
+                failures.append(f"{repo.name}/docs/{filename}")
+                continue
+            manifest = json.loads(manifest_path.read_text())
+            if canonical is None:
+                canonical = manifest
+            elif manifest != canonical:
+                failures.append(f"{repo.name}/docs/{filename}")
+            failures.extend(f"{repo.name}/{name}" for name in check(repo, canonical))
     if failures:
         raise SystemExit("共通ファイルの差分: " + ", ".join(failures))
 

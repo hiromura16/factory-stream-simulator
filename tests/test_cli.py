@@ -80,6 +80,10 @@ def test_cli_authentication(tmp_path, mode):
         assert result.returncode == 2 and "ADMIN_PASSWORD_FILE" in result.stderr
         assert requests == []
         return
+    if mode == "redirect":
+        assert result.returncode == 1 and "リダイレクト" in result.stderr
+        assert [path for path, _ in requests] == ["/api/info"]
+        return
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"kind": "test"}
     expected = (
@@ -88,6 +92,4 @@ def test_cli_authentication(tmp_path, mode):
         else None
     )
     expected_requests = [("/api/info", expected)]
-    if mode == "redirect":
-        expected_requests.append(("/other-path", None))
     assert requests == expected_requests

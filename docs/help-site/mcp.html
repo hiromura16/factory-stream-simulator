@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CLI・MCP | ストリーム送信</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/help.css">
+  <script src="/static/help.js" defer></script>
+</head>
+<body class="help-page">
+  <a class="help-skip" href="#help-content">本文へ移動</a>
+  <div class="help-top">
+    <a class="help-home" href="/">ストリーム送信</a>
+    <a href="/">アプリに戻る</a>
+  </div>
+  <div class="help-layout">
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/mcp.html" aria-current="page">CLI・MCP</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
+    <main class="help-content" id="help-content">
+      <nav class="help-outline" aria-label="このページ"><a href="#cli">CLI</a><a href="#mcpの登録">MCPの登録</a><a href="#確認が必要な実行">確認が必要な実行</a></nav>
+      <article><h1>CLIとMCPから操作する</h1>
+<p>CLIはこのリポジトリのアプリを操作します。MCPは1プロセスで、起動時に登録した複数のFactoryアプリを操作できます。</p>
+<h2 id="cli">CLI</h2>
+<p>ホストからは <code>APP_PORT</code> 環境変数、リポジトリの <code>.env</code> の <code>APP_PORT</code>、アプリの既定ポートの順でループバックに接続します。別のURLを使うときは <code>--url</code> で指定します。</p>
+<pre><code class="language-bash">uv run --frozen python cli.py presets
+uv run --frozen python cli.py export --preset-id PRESET_ID &gt; template.json
+uv run --frozen python cli.py validate template.json
+uv run --frozen python cli.py validate --compact template.json &gt; minimal.json
+uv run --frozen python cli.py preview --spec template.json
+uv run --frozen python cli.py status
+</code></pre>
+<p><code>validate</code> はローカルで検証し、接続せずに失敗時の場所と理由を返します。ファイル名に <code>-</code> を指定すると標準入力からJSONを読みます。SQL・ファイル生成・ストリーム送信のジョブは <code>status --run-id ID</code> で個別の状態を取得でき、<code>stop --run-id ID</code> で停止できます。他のアプリの停止は実行IDなしの <code>stop</code> を使います。</p>
+<p>アプリの管理認証を有効にしている場合は <code>ADMIN_USERNAME</code> と <code>ADMIN_PASSWORD_FILE</code> を環境変数で指定します。CLIは従来の <code>APP_PASSWORD_FILE</code> にも対応します。ユーザー名とパスワードをURLに含めず、HTTPSまたはループバックを使ってください。CLIとMCPはHTTPリダイレクトを追跡しません。</p>
+<h2 id="mcpの登録">MCPの登録</h2>
+<p>運用者がアプリのURLをJSONファイルに登録します。種別は <code>sql</code>、<code>files</code>、<code>stream</code>、<code>equipment</code>、<code>api</code>、<code>historian</code>、<code>logs</code>、<code>identification</code> です。必要なアプリだけを登録します。次は2アプリを登録する例です。</p>
+<pre><code class="language-json">{
+  &quot;apps&quot;: {
+    &quot;sql&quot;: {
+      &quot;url&quot;: &quot;http://127.0.0.1:3560&quot;,
+      &quot;admin_username&quot;: &quot;operator&quot;,
+      &quot;admin_password_file&quot;: &quot;private/sql-admin-password&quot;,
+      &quot;confirmation_file&quot;: &quot;private/sql-start-confirmation&quot;
+    },
+    &quot;files&quot;: { &quot;url&quot;: &quot;http://127.0.0.1:3561&quot; }
+  }
+}
+</code></pre>
+<p>相対パスはこの設定ファイルを置いた場所が基準です。管理認証を使わない登録先では、ユーザー名とパスワードファイルを省略します。1つの登録先に限り、両方の代わりに <code>&quot;use_admin_env&quot;: true</code> を指定して管理認証の環境変数を使えます。</p>
+<p>MCPクライアントに標準入出力のサーバーとして登録します。絶対パスは実際の配置に置き換えます。標準ライブラリのみで動作するため、ブリッジ自体の依存パッケージはありません。アプリは別途起動してください。</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;factory-apps&quot;: {
+      &quot;command&quot;: &quot;python3&quot;,
+      &quot;args&quot;: [
+        &quot;/absolute/path/to/factory-repository/mcp_server.py&quot;,
+        &quot;--config&quot;,
+        &quot;/absolute/path/to/factory-mcp.json&quot;
+      ]
+    }
+  }
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>ツール</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list_presets</code></td>
+<td>登録したアプリのひな型のIDと名前を表示</td>
+</tr>
+<tr>
+<td><code>get_preset</code></td>
+<td><code>preset_id</code> を指定して設定JSONを取得</td>
+</tr>
+<tr>
+<td><code>validate_template</code></td>
+<td><code>spec</code> の型や項目をアプリで検証</td>
+</tr>
+<tr>
+<td><code>preview</code></td>
+<td><code>spec</code> の見本を取得</td>
+</tr>
+<tr>
+<td><code>get_status</code></td>
+<td>状態・時刻・件数を取得</td>
+</tr>
+<tr>
+<td><code>start</code></td>
+<td><code>spec</code> の見本を既定で表示。実開始には <code>execute: true</code> と人が発行した確認ファイルが必要</td>
+</tr>
+<tr>
+<td><code>stop</code></td>
+<td><code>execute: true</code> で停止。ジョブ形式では <code>run_id</code> が必要</td>
+</tr>
+</tbody>
+</table>
+<p>すべてのツールで <code>app</code> に登録済み種別を指定します。MCPの検証とプレビューは見本APIを使用し、書き込みや送信を開始しません。オフラインの検証はCLIを使います。状態の応答からは、アプリ設定、プロトコルや接続の詳細、エラー本文を除きます。MCPには確認トークンの発行、任意URLへのリクエスト、実行環境のファイル参照のツールはありません。</p>
+<h2 id="確認が必要な実行">確認が必要な実行</h2>
+<ol>
+<li>
+<p><code>preview</code> で見本を確認します。</p>
+</li>
+<li>
+<p>人が開始先、接続の版、処理内容を確認するために、CLIで計画を作ります。ファイルは既存のものと重複しない名前にします。</p>
+<pre><code class="language-bash">uv run --frozen python cli.py plan --spec template.json \
+  --confirmation-file private/start-confirmation
+</code></pre>
+</li>
+<li>
+<p>表示された計画を確認したら、同じ設定と確認ファイルで開始します。</p>
+<pre><code class="language-bash">uv run --frozen python cli.py start --spec template.json \
+  --confirmation-file private/start-confirmation
+</code></pre>
+</li>
+</ol>
+<p>MCPで開始する場合は、起動時に登録した <code>confirmation_file</code> と同じパスへ計画のトークンを書き出し、その後に人が許可して <code>start</code> を <code>execute: true</code> で呼びます。確認トークンの値をチャットや引数に貼り付ける必要はありません。トークンはファイル（権限0600）にだけ保存されます。設定内容と接続先の版は計画と実行で揃えてください。ログの固定プロファイル版が必要なときはCLIの計画・開始に <code>--profile-revision</code> を付け、MCPなら開始時に同じ <code>profile_revision</code> を指定します。CLIの計画は、通常の開始に確認が不要な場合も確認トークンを要求します。MCPの実開始は確認APIを備えたアプリに限ります。</p>
+<p>SQLのテーブル準備には <code>plan --operation prepare</code> と <code>prepare</code>、ストリームの再送には <code>plan --operation retry</code> と <code>retry</code> を使います。確認を要求する条件と拒否理由は、それぞれのアプリのOpenAPIを参照してください。</p>
+<p>仕様は <a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/transports">MCP 2025-11-25のstdio</a> と <a href="https://modelcontextprotocol.io/specification/2025-11-25/server/tools">toolsの契約</a> に従います。起動時に 2025-11-25 または 2025-06-18 をネゴシエートします。</p>
+</article>
+    </main>
+  </div>
+</body>
+</html>

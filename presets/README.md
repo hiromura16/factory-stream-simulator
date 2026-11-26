@@ -3,56 +3,56 @@
 迷ったときは[ひな型を選ぶ・作る](../docs/preset-guide.md)を参照してください。
 アプリで保存したひな型はアプリの一覧から開きます。
 
-| ID | 表示名 | 元の件数 | 想定 |
+| ID | 表示名 | 元の件数 | 生成する内容 |
 | --- | --- | --- | --- |
-| [01-quickstart](#01-quickstart) | 小さく試す | 30 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [02-volume-100k](#02-volume-100k) | 10万件 / 負荷計測 | 100000 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [03-volume-1m](#03-volume-1m) | 100万件 / 連続生成 | 1000000 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [04-volume-10m](#04-volume-10m) | 1000万件 / 大規模試験 | 10000000 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [05-flat-json](#05-flat-json) | 平坦JSON / メタデータなし | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [06-nested-telemetry](#06-nested-telemetry) | 入れ子JSON / 測定値の配列 | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [07-dynamic-routing](#07-dynamic-routing) | 項目別の配送先 / テンプレート | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [08-http-ndjson](#08-http-ndjson) | HTTP / NDJSONバッチ | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [09-http-single](#09-http-single) | HTTP / 1件ずつ送信 | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [10-array-payload](#10-array-payload) | 配列の本文 / 最小構造 | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [11-weighted-status](#11-weighted-status) | 状態比率 / 98 : 1 : 1 | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [12-cyclic-counter](#12-cyclic-counter) | 周期カウンター / 0〜99 | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [13-paced-events](#13-paced-events) | 定常送信 / 毎秒10件 | 300 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [14-burst-1000](#14-burst-1000) | バースト / 1000件と休止 | 5000 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [15-jitter](#15-jitter) | 間隔のゆらぎ / 遅延を再現 | 300 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [16-many-sources](#16-many-sources) | 多数ソース / 10万種類 | 10000 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [17-nullable-values](#17-nullable-values) | 欠測イベント / NULL率25% | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [18-deterministic](#18-deterministic) | 再現性 / 同一キーとシード | 1000 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [19-resume](#19-resume) | 途中から / シーケンス10万 | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [20-historical](#20-historical) | 過去データ / 高速リプレイ | 1000 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [21-unicode](#21-unicode) | 多言語イベント / UTF-8 | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [22-derived-values](#22-derived-values) | 派生イベント / 計算と条件 | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [23-sparse-events](#23-sparse-events) | まばらなイベント / 毎秒2件 | 60 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [24-custom-envelope](#24-custom-envelope) | 独自メタデータ名 / metadata | 120 | 設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です |
-| [25-mes-sensor-spike](#25-mes-sensor-spike) | 異常 / MES センサーの突発値 | 120 | 測定系への瞬間的なノイズや設備の異常発熱を想定。平均50付近の値に短い高値区間を混ぜます |
-| [26-mes-sensor-drift](#26-mes-sensor-drift) | 異常 / MES センサーの徐々なドリフト | 120 | 校正ずれや温度上昇で値が徐々に偏るケース。単発の閾値超過より検知しにくい変化を再現します |
-| [27-mes-stuck-signal](#27-mes-stuck-signal) | 異常 / MES センサー値の固着 | 120 | センサーや通信キャッシュが停止し、時刻やレコードは増えるのに測定値が変化しない状態 |
-| [28-mes-missing-values](#28-mes-missing-values) | 異常 / MES 測定値の欠測 | 120 | 一時的な機器読み取り失敗や、MESへの登録時に測定値が空になるケース |
-| [29-mes-late-events](#29-mes-late-events) | 異常 / MES 遅延・順序逆転 | 120 | 設備側のバッファやネットワーク遅延で、遅いイベント時刻のデータが後から到着する状態 |
-| [30-mes-clock-skew](#30-mes-clock-skew) | 異常 / MES 設備時計が未来へずれる | 120 | NTP不調や設備時計の設定誤りで、1日先の時刻が登録されるケース |
-| [31-mes-unit-mismatch](#31-mes-unit-mismatch) | 異常 / MES 単位・倍率の食い違い | 120 | 単位変更が伝わらず、kPa/Paやmm/µmのように1000倍の値が混在する状況 |
-| [32-mes-unknown-state](#32-mes-unknown-state) | 異常 / MES 未知の状態コード | 120 | 設備ファームウェアやMESバージョン更新で、未定義の状態コードが出るケース |
-| [33-mes-negative-quantity](#33-mes-negative-quantity) | 異常 / MES 負の生産数量 | 120 | 符号の取り違えや取消処理を通常実績として登録してしまうケース |
-| [34-mes-reject-exceeds-total](#34-mes-reject-exceeds-total) | 異常 / MES 不良数が生産数を超える | 120 | 不良実績の二重登録や集計単位の混在で、不良数が総数より大きくなる状態 |
-| [35-mes-impossible-yield](#35-mes-impossible-yield) | 異常 / MES 歩留まりが100%を超える | 120 | 歩留まりの分母間違い、パーセントと比率の混同などを想定 |
-| [36-mes-orphan-work-order](#36-mes-orphan-work-order) | 異常 / MES 存在しない製造指図 | 120 | MES実績がERPの指図マスターへ結合できないケース。連携順序のずれも想定します |
-| [37-mes-route-step-jump](#37-mes-route-step-jump) | 異常 / MES 工程番号の飛び | 120 | 工程スキップ、ルート版の違い、手入力ミスで予定外の工程番号が記録される状態 |
-| [38-erp-negative-stock](#38-erp-negative-stock) | 異常 / ERP マイナス在庫 | 120 | 出庫の先行連携、二重出庫、棚卸調整の誤りで在庫が負になるケース |
-| [39-erp-over-reservation](#39-erp-over-reservation) | 異常 / ERP 引当が在庫を超える | 120 | 並行した指図引当や在庫更新の遅れにより、在庫以上に予約される状態 |
-| [40-erp-amount-discrepancy](#40-erp-amount-discrepancy) | 異常 / ERP 数量×単価と金額の不一致 | 120 | 丸め差、税区分、転記ミス、誤った再計算で請求金額が合わないケース |
-| [41-erp-duplicate-document](#41-erp-duplicate-document) | 異常 / ERP 業務伝票の重複 | 120 | 取り込みの再実行や送信側リトライで、同じ伝票番号が別レコードとして届く状態 |
-| [42-erp-orphan-product](#42-erp-orphan-product) | 異常 / ERP 未登録の品目参照 | 120 | 品目マスターより先に明細が届く、または廃番・コード変換の誤りで結合に失敗するケース |
-| [43-invalid-value-type](#43-invalid-value-type) | 異常 / 数値欄へ文字列が混入 | 120 | 機器が数値の代わりにエラー文字列を返す、CSV連携で型推論が崩れる状況 |
-| [44-missing-required-field](#44-missing-required-field) | 異常 / 必須項目そのものが欠落 | 120 | ソースのスキーマ変更やシリアライズ不具合で、NULLではなくキー自体が消えるケース |
-| [45-stream-before-send-fault](#45-stream-before-send-fault) | 異常 / 配送 送信前の一時障害 | 120 | outboxへ永続化できたが、ネットワークへ送る前に接続が失敗する状態 |
-| [46-stream-ack-loss](#46-stream-ack-loss) | 異常 / 配送 ACK消失 / 重複再送 | 120 | ブローカーには届いたが、送信側が配送済みと確定できない状況 |
-| [47-stream-transient-retry](#47-stream-transient-retry) | 異常 / 配送 一過性の障害と自動再試行 | 120 | 1回だけ接続エラーが出て、次の試行で回復する状態 |
-| [48-stream-backpressure-delay](#48-stream-backpressure-delay) | 異常 / 配送 遅延・バックプレッシャー | 120 | 受信側が遅い状態に似た、送信前の待機を再現。ブローカーや外部ネットワーク自体は変更しません |
+| [01-quickstart](#01-quickstart) | 小さく試す | 30 | 目標速度 10件/秒、1バッチ 10件で試す |
+| [02-volume-100k](#02-volume-100k) | 10万件 / 負荷計測 | 100000 | 目標速度 1,000件/秒、1バッチ 1,000件で試す |
+| [03-volume-1m](#03-volume-1m) | 100万件 / 連続生成 | 1000000 | 目標速度 5,000件/秒、1バッチ 2,000件で試す |
+| [04-volume-10m](#04-volume-10m) | 1000万件 / 大規模試験 | 10000000 | 目標速度 10,000件/秒、1バッチ 5,000件で試す |
+| [05-flat-json](#05-flat-json) | 平坦JSON / メタデータなし | 120 | 生成行をそのまま送信。idに安定したレコードキーが入ります |
+| [06-nested-telemetry](#06-nested-telemetry) | 入れ子JSON / 測定値の配列 | 120 | 任意の入れ子構造に変換して配送メタデータを追加します |
+| [07-dynamic-routing](#07-dynamic-routing) | 項目別の配送先 / テンプレート | 120 | entity_idごとにevents.ENTITY-xxxxxへ配送先名を分けます。Kafka/NATS/AMQP側の対象作成・購読条件も合わせます |
+| [08-http-ndjson](#08-http-ndjson) | HTTP / NDJSONバッチ | 120 | HTTP受信APIを接続先に選択してください。1行1JSONのNDJSONで送ります |
+| [09-http-single](#09-http-single) | HTTP / 1件ずつ送信 | 120 | HTTP受信APIを接続先に選択してください。各リクエストの本文はJSONオブジェクト1件です |
+| [10-array-payload](#10-array-payload) | 配列の本文 / 最小構造 | 120 | 本文を[entity_id,value,event_time]へ変換。メタデータ追加は無効 |
+| [11-weighted-status](#11-weighted-status) | 状態比率 / 98 : 1 : 1 | 120 | 通常98%、warning1%、stopped1%の偏りを持つイベント |
+| [12-cyclic-counter](#12-cyclic-counter) | 周期カウンター / 0〜99 | 120 | sequence_noを0〜99の周期で繰り返します。record_keyは重複しません |
+| [13-paced-events](#13-paced-events) | 定常送信 / 毎秒10件 | 300 | バッチ10件で毎秒10件を目標に送信します。イベント日時は10件ごとに1秒進みます |
+| [14-burst-1000](#14-burst-1000) | バースト / 1000件と休止 | 5000 | 1000イベントごとに2秒休止。速度制限なしでバッチ100件ずつ処理 |
+| [15-jitter](#15-jitter) | 間隔のゆらぎ / 遅延を再現 | 300 | 毎秒20件を目標に、待機へ最大300msのゆらぎを追加します |
+| [16-many-sources](#16-many-sources) | 多数ソース / 10万種類 | 10000 | entity_idの種類を10万へ拡大し、高カーディナリティのイベントを生成 |
+| [17-nullable-values](#17-nullable-values) | 欠測イベント / NULL率25% | 120 | 測定値が25%の確率でNULLになるイベント |
+| [18-deterministic](#18-deterministic) | 再現性 / 同一キーとシード | 1000 | run_keyを固定。再実行は既存outboxの同じデータを二重登録しません。生成条件を変える場合はrun_keyも変えます |
+| [19-resume](#19-resume) | 途中から / シーケンス10万 | 120 | 開始位置を10万に設定した分割生成。再開元とrun_key・seedを合わせて使用します |
+| [20-historical](#20-historical) | 過去データ / 高速リプレイ | 1000 | 2025年の日時から0.01秒刻みでイベントを生成し、速度制限なしで送信 |
+| [21-unicode](#21-unicode) | 多言語イベント / UTF-8 | 120 | 日本語・英語の状態を含めたJSONの受信確認 |
+| [22-derived-values](#22-derived-values) | 派生イベント / 計算と条件 | 120 | 生成したaとbからsumを計算し、a>80ならalert=trueにします |
+| [23-sparse-events](#23-sparse-events) | まばらなイベント / 毎秒2件 | 60 | バッチ1件・毎秒2件・開始待機3秒。低頻度ソースの試験 |
+| [24-custom-envelope](#24-custom-envelope) | 独自メタデータ名 / metadata | 120 | 配送情報のキーをmetadataへ変更し、本文をdataの入れ子にします |
+| [25-mes-sensor-spike](#25-mes-sensor-spike) | 異常 / MES センサーの突発値 | 120 | valueを20〜39件目だけ250へ変更。前後は通常の正規分布です |
+| [26-mes-sensor-drift](#26-mes-sensor-drift) | 異常 / MES センサーの徐々なドリフト | 120 | valueへ20件目から1件ごとに2を追加するramp。39件目で最大+38、その後は復帰 |
+| [27-mes-stuck-signal](#27-mes-stuck-signal) | 異常 / MES センサー値の固着 | 120 | 20〜39件目のvalueを20件目の値に固定します。IDとevent_timeは進みます |
+| [28-mes-missing-values](#28-mes-missing-values) | 異常 / MES 測定値の欠測 | 120 | 20〜39件目で50%の確率でvalueをNULL。seedが同じなら欠測位置も再現します |
+| [29-mes-late-events](#29-mes-late-events) | 異常 / MES 遅延・順序逆転 | 120 | 20〜39件目のうち2件ごとにevent_timeを120秒戻します。配送順そのものはシーケンス順です |
+| [30-mes-clock-skew](#30-mes-clock-skew) | 異常 / MES 設備時計が未来へずれる | 120 | 20〜39件目のevent_timeを86400秒進めます。タイムゾーン表記は有効なままです |
+| [31-mes-unit-mismatch](#31-mes-unit-mismatch) | 異常 / MES 単位・倍率の食い違い | 120 | 20〜39件目のvalueを1000倍にします。列名や型は変えません |
+| [32-mes-unknown-state](#32-mes-unknown-state) | 異常 / MES 未知の状態コード | 120 | 20〜39件目のstatusをUNKNOWN_CODEへ変更します。文字列としては正常です |
+| [33-mes-negative-quantity](#33-mes-negative-quantity) | 異常 / MES 負の生産数量 | 120 | totalを-20へ変更。good/reject/yield_ratioは変更前の計算値を残します |
+| [34-mes-reject-exceeds-total](#34-mes-reject-exceeds-total) | 異常 / MES 不良数が生産数を超える | 120 | rejectを180へ変更。通常のtotalは100〜120です |
+| [35-mes-impossible-yield](#35-mes-impossible-yield) | 異常 / MES 歩留まりが100%を超える | 120 | yield_ratioだけを1.2へ変更。total/good/rejectは正常のままです |
+| [36-mes-orphan-work-order](#36-mes-orphan-work-order) | 異常 / MES 存在しない製造指図 | 120 | work_order_idをWO-MISSINGへ変更。通常の有効IDはparameters.valid_work_ordersに列挙しています |
+| [37-mes-route-step-jump](#37-mes-route-step-jump) | 異常 / MES 工程番号の飛び | 120 | process_stepへ100を加えます。通常は0〜4の周期です |
+| [38-erp-negative-stock](#38-erp-negative-stock) | 異常 / ERP マイナス在庫 | 120 | qty_on_handを-5へ変更。reserved/availableは元の値を残します |
+| [39-erp-over-reservation](#39-erp-over-reservation) | 異常 / ERP 引当が在庫を超える | 120 | reservedを2000へ変更。通常qty_on_handは100〜1000です |
+| [40-erp-amount-discrepancy](#40-erp-amount-discrepancy) | 異常 / ERP 数量×単価と金額の不一致 | 120 | amountへ0.01加算。quantityとunit_priceは変更しません |
+| [41-erp-duplicate-document](#41-erp-duplicate-document) | 異常 / ERP 業務伝票の重複 | 120 | 20〜39件目のdocument_idを先頭行の番号に置き換えます。技術的なidは異なるため通常のPKでは検知できません |
+| [42-erp-orphan-product](#42-erp-orphan-product) | 異常 / ERP 未登録の品目参照 | 120 | product_idをPRODUCT-MISSINGへ変更。通常の有効コードはparameters.valid_productsに列挙しています |
+| [43-invalid-value-type](#43-invalid-value-type) | 異常 / 数値欄へ文字列が混入 | 120 | valueへSENSOR_ERRORを入れ、型検証の迂回を明示的に有効化します |
+| [44-missing-required-field](#44-missing-required-field) | 異常 / 必須項目そのものが欠落 | 120 | 20〜39件目のvalueキーを削除します。JSON/ストリームは欠落、CSVは空セルになります |
+| [45-stream-before-send-fault](#45-stream-before-send-fault) | 異常 / 配送 送信前の一時障害 | 120 | 2バッチ目の送信前に意図的に停止。最初の10件は配送済み、次の10件はpendingになる想定 |
+| [46-stream-ack-loss](#46-stream-ack-loss) | 異常 / 配送 ACK消失 / 重複再送 | 120 | 2バッチ目を送信しACKを受けた直後、outbox更新前に意図的な例外。再送時は同じrecord_keyが再配送されます |
+| [47-stream-transient-retry](#47-stream-transient-retry) | 異常 / 配送 一過性の障害と自動再試行 | 120 | 2バッチ目の最初の送信前に1回だけ失敗。試行数3、待機200msで自動再試行します |
+| [48-stream-backpressure-delay](#48-stream-backpressure-delay) | 異常 / 配送 遅延・バックプレッシャー | 120 | 最初の3バッチの送信前に1秒ずつ待機します |
 
 ## ひな型ごとの内容
 

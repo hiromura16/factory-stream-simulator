@@ -1,3 +1,5 @@
+from test_operation_gate import confirmed_post
+
 import json
 import time
 from types import SimpleNamespace
@@ -218,7 +220,7 @@ def test_api_without_login_csrf_profile_preset_roundtrip_and_no_secret_echo(tmp_
         assert c.post("/api/presets/mine", json=spec).status_code == 200
         assert c.get("/api/presets/mine/export").json() == spec
         assert "接続" in c.get("/api/schemas").text
-        r = c.post("/api/runs", json=spec)
+        r = confirmed_post(c,"/api/runs", json=spec)
         assert r.status_code == 202
         identity = r.json()["id"]
         for _ in range(100):

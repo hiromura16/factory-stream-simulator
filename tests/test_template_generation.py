@@ -230,3 +230,56 @@ def test_offline_stream_validation_accepts_a_destination_supplied_topic():
         },
     })
     assert spec.stream.topic_template == ""
+
+
+
+def test_numeric_anomaly_warning_preserves_conversion_and_skips_disabled_rules():
+    from generation import anomaly_warnings
+
+    fields = [
+        {"name": "text", "generator": "constant", "value": "label"},
+        {"name": "numeric_text", "generator": "constant", "value": "2.5"},
+        {
+            "name": "number", "generator": "constant",
+            "data_type": "integer", "value": 2,
+        },
+    ]
+    anomalies = [
+        {"name": "text", "field": "text", "operation": "ramp", "value": 1},
+        {"name": "numeric_text", "field": "numeric_text", "operation": "add", "value": 1},
+        {"name": "number", "field": "number", "operation": "multiply", "value": 2},
+        {"name": "disabled", "field": "text", "operation": "multiply", "enabled": False},
+        {"name": "never", "field": "text", "operation": "ramp", "probability": 0},
+    ]
+    spec = RunSpec.model_validate({"fields": fields, "anomalies": anomalies})
+    warnings = anomaly_warnings(spec, prefix=("generator",))
+    assert [warning["loc"] for warning in warnings] == [
+        ["body", "generator", "anomalies", 0, "field"],
+        ["body", "generator", "anomalies", 1, "field"],
+    ]
+    assert {warning["code"] for warning in warnings} == {"non_numeric_anomaly_field"}
+    assert generate_record(spec, 1) == {"text": "label", "numeric_text": "3.5", "number": 4}
+
+
+@pytest.mark.parametrize(
+    "payload, path, code, message",
+    [
+        (
+            {"fields": [{"name": "event_time", "generator": "timestamp",
+                         "data_type": "datetime", "start": "not-a-date"}]},
+            ("fields", 0, "start"), "invalid_datetime", "タイムゾーン付きISO 8601",
+        ),
+        (
+            {"fields": [{"name": "v", "generator": "constant", "value": 17}],
+             "anomalies": [{"name": "copied", "field": "v", "operation": "copy_from"}]},
+            ("anomalies", 0, "value"), "copy_from_position_required", "0始まりの整数",
+        ),
+    ],
+)
+def test_generation_errors_offer_stable_code_and_specific_fix(payload, path, code, message):
+    spec = RunSpec.model_validate(payload)
+    with pytest.raises(GenerationError) as error:
+        generate_record(spec, 0)
+    assert error.value.path == path
+    assert error.value.code == code
+    assert message in str(error.value)

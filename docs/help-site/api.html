@@ -15,9 +15,9 @@
     <a href="/">アプリに戻る</a>
   </div>
   <div class="help-layout">
-    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html" aria-current="page">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html" aria-current="page">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/mcp.html">CLI・MCP</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
     <main class="help-content" id="help-content">
-      <nav class="help-outline" aria-label="このページ"><a href="#最初のリクエスト">最初のリクエスト</a><a href="#操作を選ぶ">操作を選ぶ</a><a href="#このアプリで取得できる結果">このアプリで取得できる結果</a><a href="#認証とpost">認証とPOST</a><a href="#エラ-の見方">エラーの見方</a></nav>
+      <nav class="help-outline" aria-label="このページ"><a href="#最初のリクエスト">最初のリクエスト</a><a href="#操作を選ぶ">操作を選ぶ</a><a href="#このアプリで取得できる結果">このアプリで取得できる結果</a><a href="#認証とpost">認証とPOST</a><a href="#実行前に接続先と操作を確認する">実行前に接続先と操作を確認する</a><a href="#エラ-の見方">エラーの見方</a></nav>
       <article><h1>ストリーム送信のAPI</h1>
 <p><a href="/docs">Swagger UI</a>で操作ごとのリクエストと応答を確認できます。<a href="/openapi.json">OpenAPI JSON</a>はAPIクライアントへの読み込み、<a href="/redoc">ReDoc</a>はモデル参照に使えます。</p>
 <h2 id="最初のリクエスト">最初のリクエスト</h2>
@@ -87,6 +87,14 @@ curl -fsS &quot;$base/api/preview&quot; \
 <h2 id="認証とpost">認証とPOST</h2>
 <p>管理画面の認証を設定した環境では、管理APIにも同じ認証が必要です。接続先の資格情報は環境側で管理します。</p>
 <p>POSTには <code>Content-Type: application/json</code> を付けます。入力のない停止操作をcurlで呼ぶ場合は <code>--data '{}'</code> を付けます。ブラウザーからの変更操作は同一オリジンで実行します。</p>
+<h2 id="実行前に接続先と操作を確認する">実行前に接続先と操作を確認する</h2>
+<p>外部の宛先への書き込み・送信、公開の開始、SQLのテーブル作成や行の変更には実行前の確認が必要です。プレビューと計画は生成・送信・書き込みを開始しません。</p>
+<ol>
+<li>実行パス（例 <code>/api/runs</code>、<code>/api/table/prepare</code>、<code>/api/start</code>）と送信するJSONを <code>{&quot;path&quot;:&quot;…&quot;,&quot;payload&quot;:{…}}</code> の形で <code>POST /api/operations/plan</code> に渡します。</li>
+<li>応答の <code>summary</code> にある操作、出力先、版、テーブル・件数を確認します。ログの開始URLに <code>profile_revision</code> を使う場合は、計画のJSONにも同じ値を指定します。</li>
+<li><code>confirmation_required</code> が <code>true</code> のときは、同じ設定と <code>X-Operation-Confirmation</code> ヘッダーで実行します。トークンは短時間で失効し、1回だけ使用できます。設定または接続先の版が変わると再確認が必要です。</li>
+</ol>
+<p>428は確認が必要な応答です。CLIは <code>plan</code> コマンドで確認用ファイルを作成できます。</p>
 <h2 id="エラ-の見方">エラーの見方</h2>
 <table>
 <thead>
@@ -115,6 +123,8 @@ curl -fsS &quot;$base/api/preview&quot; \
 </tbody>
 </table>
 <p><a href="/help/settings.html">設定リファレンス</a> · <a href="/help/templates.html">JSONの書き方</a></p>
+<p><a href="/help/mcp.html">CLI・MCPの使い方</a></p>
+<p>確認プランと実行には同じ管理APIの権限が必要です。トークンは送信内容と接続先の取り違えを防ぎます。管理権限を持つクライアントは計画と実行の両方を呼べるため、承認者を分ける運用では管理資格情報の配布も制限してください。MCPは既定で見本・検証・参照だけを公開します。</p>
 </article>
     </main>
   </div>

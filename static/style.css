@@ -1,12 +1,5 @@
 @font-face {
   font-family: "Noto Sans JP";
-  src: url("/static/fonts/noto-sans-jp-all.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Noto Sans JP";
   src: url("/static/fonts/noto-sans-jp-ui.woff2") format("woff2");
   font-style: normal;
   font-weight: 100 900;

@@ -19,6 +19,7 @@ from starlette.routing import get_route_path
 
 from config import ConfigurationError
 from generation import GenerationError
+from operation_confirmation import CONFIRMATION_HEADER, POLICY
 
 SOURCE_SECURITY = [{}, {"SourceBasic": []}, {"SourceBearer": []}, {"SourceApiKey": []}]
 SOURCE_SCHEMES = {
@@ -140,7 +141,7 @@ def validation_message(error, body):
                     and len(field) <= 63
                 ):
                     label += f"（{field}）"
-    return {"loc": location, "location": label, "type": kind, "msg": message}
+    return {"loc": location, "location": label, "type": kind, "code": kind, "msg": message}
 
 
 def history_error(code):
@@ -172,6 +173,7 @@ def install_error_handlers(app):
                         "loc": path,
                         "location": display_location(path),
                         "type": "invalid_generation",
+                        "code": getattr(exc, "code", "invalid_generation"),
                         "msg": str(exc),
                     }
                 ]
@@ -230,6 +232,26 @@ def unauthorized_management(request, credentials, studio):
             "Cache-Control": "no-store",
         },
     )
+
+
+def annotate_openapi_properties(schema, kind, studio):
+    """Use the app's field reference for OpenAPI without changing its validation schema."""
+    if studio:
+        from studio import schemas as annotated_schemas
+    else:
+        from helptext import annotated_schemas
+    sections = annotated_schemas(kind)
+    known = {}
+    for section in sections.values():
+        if section.get("title"):
+            known[section["title"]] = section
+        known.update(section.get("$defs", {}))
+    for key, target in schema.items():
+        source = known.get(target.get("title", key), {}).get("properties", {})
+        for name, prop in target.get("properties", {}).items():
+            description = source.get(name, {}).get("description")
+            if description and not prop.get("description"):
+                prop["description"] = description
 
 
 def install_help(app, root, studio, kind, credentials):
@@ -309,6 +331,7 @@ def install_help(app, root, studio, kind, credentials):
             "url": "/help/api.html",
         }
         components = schema.setdefault("components", {})
+        annotate_openapi_properties(components.get("schemas", {}), kind, studio)
         security = components.setdefault("securitySchemes", {})
         if studio:
             security.update(SOURCE_SCHEMES)
@@ -336,6 +359,13 @@ def install_help(app, root, studio, kind, credentials):
                     operation["responses"].setdefault(
                         "401", {"description": "管理用の認証が必要です"}
                     )
+                if method == "post" and path in POLICY[kind]:
+                    operation.setdefault("parameters", []).append({
+                        "name": CONFIRMATION_HEADER, "in": "header", "required": False,
+                        "description": "確認が必要な操作では計画APIが返すトークンを指定します。",
+                        "schema": {"type": "string"},
+                    })
+                    operation["responses"]["428"] = {"description": "実行する設定と接続先の版の確認が必要です。"}
                 if method != "get":
                     if "requestBody" not in operation:
                         operation["requestBody"] = {

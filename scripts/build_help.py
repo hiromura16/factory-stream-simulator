@@ -20,6 +20,7 @@ PAGES = {
     "api": ("APIの使い方", "api-guide.md"),
     "glossary": ("用語集", "glossary.md"),
     "ai": ("AIにひな型を頼む", "AI_TEMPLATE_HARNESS.md"),
+    "mcp": ("CLI・MCP", "mcp.md"),
     "install": ("VMへの導入", "vm-compose.md"),
     "catalog": ("付属のひな型一覧", "../presets/README.md"),
 }

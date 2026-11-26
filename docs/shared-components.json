@@ -1,9 +1,15 @@
 {
-  "api_support.py": "3bc0d8850363a763021ed8aad4900401d97e462d86358ad7cad7e16334aec86f",
-  "generation.py": "fde8fda9a323336724ba6263fd65731038955e73bd9a6952092d1951648b0124",
-  "scripts/build_help.py": "d78695ec26631e12bad6b76088435bf03ee3ae8021b0abbbfd77f97a1c2925cb",
-  "scripts/check_shared.py": "0b875b26a39bd573edbdcaa16b330032207e2f4917b716c482a885d5409b4880",
-  "static/api-client.js": "1dddaa692f2eef8889667affc87013e01924cc3ba8fcc6870449002037bcc2ac",
+  "api_support.py": "d3d82d2e95bfc64679af05c39331bf803a81fb8a38325ea37f31d413d5222e09",
+  "cli.py": "e4f20d3ba0f275dbbd6f8cab6e771d4dfd2cb6db3f23fee66f7cca01ab571eed",
+  "docs/mcp.md": "eeff0593eaf8eb6ee403f1e531cfe8157addfcbdb421b41ccfb6c74d84ff2805",
+  "generation.py": "1ddaba70fa5855d8906d3131e6a4b7aeee3fb83fee01d2b05faf1b8874163a8f",
+  "mcp_server.py": "113a703bea751254752a6100e642b05efca77859be46d56750a713aff78251be",
+  "operation_confirmation.py": "05096b9efbdfc8aaa1b447bfd9c8f59d0af98210a5d49a20177873db11d07bf9",
+  "scripts/build_help.py": "5be3ceb78d678ff2d037777497d17ae411f805a0ca59e00130e94b5b8ea68a57",
+  "scripts/check_shared.py": "fe82f436b5ee90da4cd0f795101c4d226ddc7765ab2702ab7f1a30f17a1768b4",
+  "scripts/preset_catalog.py": "f1a4ee4d223f224b430677d484eaf7be437a1b7d91e5d377b4c3b9930504482d",
+  "static/api-client.js": "0c251631375561424ffbf8106580555de2a33722eb03f42f64a46e423fa6d5d3",
   "static/help.css": "69b592658775ab8995d47673e187a4c8f7129f5a51002550fd5a7fa35d655037",
-  "static/help.js": "a1598b93ada9e6e943d87d63b5103dfdb2f4d97f0ee5e268d9483a38ed261135"
+  "static/help.js": "a1598b93ada9e6e943d87d63b5103dfdb2f4d97f0ee5e268d9483a38ed261135",
+  "tests/test_agent_clients.py": "3d22cf2b214f4c38e1fc41b475836e6cbdfe0b0fdbff429d56ef7dfabbdf29b4"
 }

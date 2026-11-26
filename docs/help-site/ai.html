@@ -15,7 +15,7 @@
     <a href="/">アプリに戻る</a>
   </div>
   <div class="help-layout">
-    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html" aria-current="page">AIにひな型を頼む</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html" aria-current="page">AIにひな型を頼む</a><a href="/help/mcp.html">CLI・MCP</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
     <main class="help-content" id="help-content">
       <nav class="help-outline" aria-label="このページ"><a href="#0-人間向け-使い方">0. 人間向け：使い方</a><a href="#1-aiに渡す作成ル-ル">1. AIに渡す作成ルール</a><a href="#2-ツ-ルと形式の対応">2. ツールと形式の対応</a><a href="#3-共通-デ-タ項目-fields-の書き方-最重要">3. 共通：データ項目（`fields`）の書き方 ― 最重要</a><a href="#4-共通-異常ル-ル-anomalies">4. 共通：異常ルール（`anomalies`）</a><a href="#5-形式a-sql-ファイル-ストリ-ム">5. 形式A（SQL / ファイル / ストリーム）</a><a href="#6-形式b-設備-api-ヒストリアン-ログ-rfid">6. 形式B（設備 / API / ヒストリアン / ログ / RFID）</a><a href="#7-境界条件を確認する">7. 境界条件を確認する</a><a href="#8-検証のしかた">8. 検証のしかた</a><a href="#9-ツ-ル別の完成例">9. ツール別の完成例</a><a href="#10-依頼プロンプト-コピ-して-を埋める">10. 依頼プロンプト（コピーして【】を埋める）</a></nav>
       <article><h1>AI向けテンプレート作成ハーネス</h1>
@@ -417,14 +417,14 @@
 <li>JSON構造テンプレートの中 → <code>&quot;$parameters.lines&quot;</code></li>
 </ul>
 </li>
-<li>未定義の <code>$名前</code> は「パラメーター ○○ が定義されていません」エラー。</li>
+<li>未定義の <code>$名前</code> は「パラメーター ○○ が定義されていません」と表示される。</li>
 <li><code>parameters</code> を省略すると既定値（<code>entity_count</code>, <code>statuses</code>, <code>value_mean</code>, <code>value_stddev</code>, <code>start_time</code>）が入る。自分の項目で使わないなら無害。</li>
 </ul>
 <h3 id="3-3-文字列テンプレ-ト-generator-template-ファイル名-トピック-ログ本文">3.3 文字列テンプレート（<code>generator: &quot;template&quot;</code>、ファイル名・トピック・ログ本文）</h3>
 <ul>
 <li>参照できる名前：<strong>それより上に定義した項目</strong>、<code>parameters</code> のキー、<code>sequence</code>（通番）、<code>record_id</code>。</li>
 <li>書式指定は <strong>短い数値書式だけ</strong>：<code>{no:05d}</code>（ゼロ埋め整数）、<code>{v:.2f}</code>（小数2桁）、<code>{s}</code>。<code>,</code> <code>x</code> <code>&gt;</code> <code>!r</code> <code>.attr</code> <code>[0]</code> などは不可。</li>
-<li><strong><code>:d</code> を使う項目は <code>data_type: &quot;integer&quot;</code> にする</strong>（string や number だと「生成ルールの型・範囲・日時を確認してください」エラー）。</li>
+<li><strong><code>:d</code> を使う項目は <code>data_type: &quot;integer&quot;</code> にする</strong>（string や number だと「整数書式 d では整数型の項目を参照してください」と表示される）。</li>
 <li><strong><code>:.2f</code> は number / integer 項目にのみ</strong>。decimal は文字列なので <code>:.2f</code> 不可。</li>
 <li>datetime 項目を埋め込むと UTC の ISO 文字列になる。</li>
 <li><code>{</code> <code>}</code> を文字として出したい場合はテンプレートで扱えないので、constant を使う。</li>
@@ -437,7 +437,7 @@
 <li><code>field</code>：<strong>それより上の項目</strong>。<code>operator</code>：<code>eq</code> <code>ne</code> <code>gt</code> <code>ge</code> <code>lt</code> <code>le</code> <code>in</code>。<code>value</code> / <code>then_value</code> は <code>&quot;$param&quot;</code> 可。</li>
 <li><code>in</code> の <code>value</code> は <strong>配列</strong>にする（例 <code>[&quot;STOP&quot;,&quot;ALARM&quot;]</code>）。</li>
 <li>評価順：生成 → 条件 → <code>null_probability</code> → 型チェック。</li>
-<li><strong><code>gt/ge/lt/le</code> で比較する項目に <code>null_probability</code> を付けない</strong>（§7）。</li>
+<li>大小比較では片方がNULLなら不一致になります。NULL自体を調べる場合は <code>eq</code> と <code>null</code> を指定します。</li>
 </ul>
 <h3 id="3-5-書き方の型-コピ-用スニペット">3.5 書き方の型（コピー用スニペット）</h3>
 <pre><code class="language-json">{&quot;name&quot;:&quot;id&quot;,&quot;data_type&quot;:&quot;string&quot;,&quot;generator&quot;:&quot;record_id&quot;,&quot;primary_key&quot;:true,&quot;length&quot;:64}
@@ -553,7 +553,7 @@
 <td><code>add</code></td>
 <td>増分</td>
 <td>加算</td>
-<td><strong>数値項目、かつ NULL にならない項目のみ</strong></td>
+<td><strong>数値項目。欠測値はそのまま</strong></td>
 </tr>
 <tr>
 <td><code>multiply</code></td>
@@ -1465,6 +1465,7 @@
 <li>[ ] <code>description</code> に「想定」「異常の位置と内容（正解）」「確認すること」を書いた</li>
 </ul>
 <h3 id="8-3-エラ-メッセ-ジ-原因-直し方">8.3 エラーメッセージ → 原因 → 直し方</h3>
+<p>応答の <code>detail</code> が配列の場合は、各要素の <code>location</code>（画面と同じ1始まりの場所）、<code>loc</code>（API用の0始まりのパス）、<code>code</code>、<code>msg</code> を確認します。たとえば <code>[&quot;body&quot;,&quot;fields&quot;,1,&quot;min&quot;]</code> は「fields → 2番目 → min」です。<code>generator</code> に設定を入れるアプリでは、パスも <code>generator.fields</code> から始まります。</p>
 <table>
 <thead>
 <tr>
@@ -1475,24 +1476,24 @@
 </thead>
 <tbody>
 <tr>
-<td><code>Extra inputs are not permitted</code>（<code>loc</code> の最後がキー名）</td>
-<td>存在しないキー・綴り違い（<code>min</code>→<code>minimum</code> など）</td>
-<td>本書の表にあるキー名に直す。<code>loc</code> の数字は<strong>0始まり</strong>の配列番号（<code>[&quot;body&quot;,&quot;fields&quot;,1,&quot;min&quot;]</code> = 2番目の項目の <code>min</code>）</td>
+<td>このキーは使用できません（<code>extra_forbidden</code>）</td>
+<td>未定義のキー（例 <code>min</code>）</td>
+<td>応答が候補を示したら <code>minimum</code> などの正式名に変更。</td>
 </tr>
 <tr>
-<td><code>Input should be 'record_id', 'uuid', ...</code></td>
-<td>generator / data_type / operation 等の綴り</td>
-<td>列挙値から選ぶ</td>
+<td>設定で許可されている選択肢を指定してください（<code>literal_error</code>）</td>
+<td>generator／data_type／operationの指定</td>
+<td>設定リファレンスの選択肢から選ぶ。</td>
 </tr>
 <tr>
-<td><code>String should match pattern '^[A-Za-z_]...'</code></td>
-<td>項目名・テーブル名に日本語・ハイフン等</td>
-<td>英数字と <code>_</code> に</td>
+<td>文字の使い方が指定の書式に合いません（<code>string_pattern_mismatch</code>）</td>
+<td>識別子などの書式が不正</td>
+<td>設定リファレンスで項目・テーブルなどの許容文字を確認。</td>
 </tr>
 <tr>
-<td><code>JSON decode error</code></td>
+<td>JSONの構文を確認してください（<code>json_invalid</code>）</td>
 <td>JSONの構文エラー</td>
-<td>末尾カンマ・コメント・クォートを確認</td>
+<td>末尾カンマ・コメント・引用符を確認。</td>
 </tr>
 <tr>
 <td><code>パラメーター X が定義されていません</code></td>
@@ -1500,9 +1501,9 @@
 <td><code>parameters</code> に X を追加</td>
 </tr>
 <tr>
-<td><code>テンプレート参照 X が見つかりません</code></td>
-<td>template で X を参照したが上に無い</td>
-<td>項目の順番を入れ替える／綴りを直す</td>
+<td>テンプレートで参照する項目が見つかりません</td>
+<td>対象となる項目やパラメーターが未定義</td>
+<td>項目名と順番を確認する。ログでは本文の置換名も参照先と合わせる。</td>
 </tr>
 <tr>
 <td><code>テンプレートは項目名と短い数値書式だけを参照できます</code></td>
@@ -1510,9 +1511,29 @@
 <td><code>{x}</code> <code>{x:05d}</code> <code>{x:.2f}</code> だけにする</td>
 </tr>
 <tr>
-<td><code>生成ルールの型・範囲・日時を確認してください</code></td>
-<td>書式 <code>:d</code> と型の不一致、日時の書式誤り、NULLとの大小比較、<code>in</code> に配列以外、copy_from の value 無し</td>
-<td>§7 と §8.2 を順に確認</td>
+<td>整数書式 d では整数型の項目を参照してください</td>
+<td><code>{x:03d}</code> の参照先が整数型でない</td>
+<td>参照先の型を <code>integer</code> にするか、<code>:d</code> を外す。</td>
+</tr>
+<tr>
+<td>in の比較値にはJSON配列を指定してください</td>
+<td>比較候補が配列でない</td>
+<td><code>[&quot;A&quot;, &quot;B&quot;]</code> のような配列を使う。</td>
+</tr>
+<tr>
+<td>タイムゾーン付きISO 8601の日時を指定してください（<code>invalid_datetime</code>）</td>
+<td>日時の書式が不正</td>
+<td><code>2026-12-01T08:00:00+09:00</code> のように日時を指定する。</td>
+</tr>
+<tr>
+<td>コピー元の位置には0始まりの整数を指定してください（<code>copy_from_position_required</code>）</td>
+<td><code>copy_from.value</code> が未指定または整数でない</td>
+<td>コピー元の位置を0始まりの整数で指定する。</td>
+</tr>
+<tr>
+<td>値の型・範囲・書式を確認してください</td>
+<td>設定の値を意図した型に解釈できない</td>
+<td><code>location</code> で対象項目を特定し、書式・型・範囲を設定リファレンスで確認する。</td>
 </tr>
 <tr>
 <td><code>X は整数ではありません</code></td>

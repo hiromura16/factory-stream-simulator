@@ -15,7 +15,7 @@
     <a href="/">アプリに戻る</a>
   </div>
   <div class="help-layout">
-    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html" aria-current="page">付属のひな型一覧</a></nav>
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/mcp.html">CLI・MCP</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html" aria-current="page">付属のひな型一覧</a></nav>
     <main class="help-content" id="help-content">
       <nav class="help-outline" aria-label="このページ"><a href="#ひな型ごとの内容">ひな型ごとの内容</a></nav>
       <div class="help-search" hidden><label for="help-filter">表を検索</label><input id="help-filter" type="search" placeholder="日本語、ID、JSONキー"><p id="help-results" role="status"></p></div>
@@ -28,7 +28,7 @@
 <th>ID</th>
 <th>表示名</th>
 <th>元の件数</th>
-<th>想定</th>
+<th>生成する内容</th>
 </tr>
 </thead>
 <tbody>
@@ -36,289 +36,289 @@
 <td><a href="#01-quickstart">01-quickstart</a></td>
 <td>小さく試す</td>
 <td>30</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>目標速度 10件/秒、1バッチ 10件で試す</td>
 </tr>
 <tr>
 <td><a href="#02-volume-100k">02-volume-100k</a></td>
 <td>10万件 / 負荷計測</td>
 <td>100000</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>目標速度 1,000件/秒、1バッチ 1,000件で試す</td>
 </tr>
 <tr>
 <td><a href="#03-volume-1m">03-volume-1m</a></td>
 <td>100万件 / 連続生成</td>
 <td>1000000</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>目標速度 5,000件/秒、1バッチ 2,000件で試す</td>
 </tr>
 <tr>
 <td><a href="#04-volume-10m">04-volume-10m</a></td>
 <td>1000万件 / 大規模試験</td>
 <td>10000000</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>目標速度 10,000件/秒、1バッチ 5,000件で試す</td>
 </tr>
 <tr>
 <td><a href="#05-flat-json">05-flat-json</a></td>
 <td>平坦JSON / メタデータなし</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>生成行をそのまま送信。idに安定したレコードキーが入ります</td>
 </tr>
 <tr>
 <td><a href="#06-nested-telemetry">06-nested-telemetry</a></td>
 <td>入れ子JSON / 測定値の配列</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>任意の入れ子構造に変換して配送メタデータを追加します</td>
 </tr>
 <tr>
 <td><a href="#07-dynamic-routing">07-dynamic-routing</a></td>
 <td>項目別の配送先 / テンプレート</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>entity_idごとにevents.ENTITY-xxxxxへ配送先名を分けます。Kafka/NATS/AMQP側の対象作成・購読条件も合わせます</td>
 </tr>
 <tr>
 <td><a href="#08-http-ndjson">08-http-ndjson</a></td>
 <td>HTTP / NDJSONバッチ</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>HTTP受信APIを接続先に選択してください。1行1JSONのNDJSONで送ります</td>
 </tr>
 <tr>
 <td><a href="#09-http-single">09-http-single</a></td>
 <td>HTTP / 1件ずつ送信</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>HTTP受信APIを接続先に選択してください。各リクエストの本文はJSONオブジェクト1件です</td>
 </tr>
 <tr>
 <td><a href="#10-array-payload">10-array-payload</a></td>
 <td>配列の本文 / 最小構造</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>本文を[entity_id,value,event_time]へ変換。メタデータ追加は無効</td>
 </tr>
 <tr>
 <td><a href="#11-weighted-status">11-weighted-status</a></td>
 <td>状態比率 / 98 : 1 : 1</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>通常98%、warning1%、stopped1%の偏りを持つイベント</td>
 </tr>
 <tr>
 <td><a href="#12-cyclic-counter">12-cyclic-counter</a></td>
 <td>周期カウンター / 0〜99</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>sequence_noを0〜99の周期で繰り返します。record_keyは重複しません</td>
 </tr>
 <tr>
 <td><a href="#13-paced-events">13-paced-events</a></td>
 <td>定常送信 / 毎秒10件</td>
 <td>300</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>バッチ10件で毎秒10件を目標に送信します。イベント日時は10件ごとに1秒進みます</td>
 </tr>
 <tr>
 <td><a href="#14-burst-1000">14-burst-1000</a></td>
 <td>バースト / 1000件と休止</td>
 <td>5000</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>1000イベントごとに2秒休止。速度制限なしでバッチ100件ずつ処理</td>
 </tr>
 <tr>
 <td><a href="#15-jitter">15-jitter</a></td>
 <td>間隔のゆらぎ / 遅延を再現</td>
 <td>300</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>毎秒20件を目標に、待機へ最大300msのゆらぎを追加します</td>
 </tr>
 <tr>
 <td><a href="#16-many-sources">16-many-sources</a></td>
 <td>多数ソース / 10万種類</td>
 <td>10000</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>entity_idの種類を10万へ拡大し、高カーディナリティのイベントを生成</td>
 </tr>
 <tr>
 <td><a href="#17-nullable-values">17-nullable-values</a></td>
 <td>欠測イベント / NULL率25%</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>測定値が25%の確率でNULLになるイベント</td>
 </tr>
 <tr>
 <td><a href="#18-deterministic">18-deterministic</a></td>
 <td>再現性 / 同一キーとシード</td>
 <td>1000</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>run_keyを固定。再実行は既存outboxの同じデータを二重登録しません。生成条件を変える場合はrun_keyも変えます</td>
 </tr>
 <tr>
 <td><a href="#19-resume">19-resume</a></td>
 <td>途中から / シーケンス10万</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>開始位置を10万に設定した分割生成。再開元とrun_key・seedを合わせて使用します</td>
 </tr>
 <tr>
 <td><a href="#20-historical">20-historical</a></td>
 <td>過去データ / 高速リプレイ</td>
 <td>1000</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>2025年の日時から0.01秒刻みでイベントを生成し、速度制限なしで送信</td>
 </tr>
 <tr>
 <td><a href="#21-unicode">21-unicode</a></td>
 <td>多言語イベント / UTF-8</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>日本語・英語の状態を含めたJSONの受信確認</td>
 </tr>
 <tr>
 <td><a href="#22-derived-values">22-derived-values</a></td>
 <td>派生イベント / 計算と条件</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>生成したaとbからsumを計算し、a&gt;80ならalert=trueにします</td>
 </tr>
 <tr>
 <td><a href="#23-sparse-events">23-sparse-events</a></td>
 <td>まばらなイベント / 毎秒2件</td>
 <td>60</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>バッチ1件・毎秒2件・開始待機3秒。低頻度ソースの試験</td>
 </tr>
 <tr>
 <td><a href="#24-custom-envelope">24-custom-envelope</a></td>
 <td>独自メタデータ名 / metadata</td>
 <td>120</td>
-<td>設備イベントやMES・ERPの連携イベントを受信側へ継続配送する想定です</td>
+<td>配送情報のキーをmetadataへ変更し、本文をdataの入れ子にします</td>
 </tr>
 <tr>
 <td><a href="#25-mes-sensor-spike">25-mes-sensor-spike</a></td>
 <td>異常 / MES センサーの突発値</td>
 <td>120</td>
-<td>測定系への瞬間的なノイズや設備の異常発熱を想定。平均50付近の値に短い高値区間を混ぜます</td>
+<td>valueを20〜39件目だけ250へ変更。前後は通常の正規分布です</td>
 </tr>
 <tr>
 <td><a href="#26-mes-sensor-drift">26-mes-sensor-drift</a></td>
 <td>異常 / MES センサーの徐々なドリフト</td>
 <td>120</td>
-<td>校正ずれや温度上昇で値が徐々に偏るケース。単発の閾値超過より検知しにくい変化を再現します</td>
+<td>valueへ20件目から1件ごとに2を追加するramp。39件目で最大+38、その後は復帰</td>
 </tr>
 <tr>
 <td><a href="#27-mes-stuck-signal">27-mes-stuck-signal</a></td>
 <td>異常 / MES センサー値の固着</td>
 <td>120</td>
-<td>センサーや通信キャッシュが停止し、時刻やレコードは増えるのに測定値が変化しない状態</td>
+<td>20〜39件目のvalueを20件目の値に固定します。IDとevent_timeは進みます</td>
 </tr>
 <tr>
 <td><a href="#28-mes-missing-values">28-mes-missing-values</a></td>
 <td>異常 / MES 測定値の欠測</td>
 <td>120</td>
-<td>一時的な機器読み取り失敗や、MESへの登録時に測定値が空になるケース</td>
+<td>20〜39件目で50%の確率でvalueをNULL。seedが同じなら欠測位置も再現します</td>
 </tr>
 <tr>
 <td><a href="#29-mes-late-events">29-mes-late-events</a></td>
 <td>異常 / MES 遅延・順序逆転</td>
 <td>120</td>
-<td>設備側のバッファやネットワーク遅延で、遅いイベント時刻のデータが後から到着する状態</td>
+<td>20〜39件目のうち2件ごとにevent_timeを120秒戻します。配送順そのものはシーケンス順です</td>
 </tr>
 <tr>
 <td><a href="#30-mes-clock-skew">30-mes-clock-skew</a></td>
 <td>異常 / MES 設備時計が未来へずれる</td>
 <td>120</td>
-<td>NTP不調や設備時計の設定誤りで、1日先の時刻が登録されるケース</td>
+<td>20〜39件目のevent_timeを86400秒進めます。タイムゾーン表記は有効なままです</td>
 </tr>
 <tr>
 <td><a href="#31-mes-unit-mismatch">31-mes-unit-mismatch</a></td>
 <td>異常 / MES 単位・倍率の食い違い</td>
 <td>120</td>
-<td>単位変更が伝わらず、kPa/Paやmm/µmのように1000倍の値が混在する状況</td>
+<td>20〜39件目のvalueを1000倍にします。列名や型は変えません</td>
 </tr>
 <tr>
 <td><a href="#32-mes-unknown-state">32-mes-unknown-state</a></td>
 <td>異常 / MES 未知の状態コード</td>
 <td>120</td>
-<td>設備ファームウェアやMESバージョン更新で、未定義の状態コードが出るケース</td>
+<td>20〜39件目のstatusをUNKNOWN_CODEへ変更します。文字列としては正常です</td>
 </tr>
 <tr>
 <td><a href="#33-mes-negative-quantity">33-mes-negative-quantity</a></td>
 <td>異常 / MES 負の生産数量</td>
 <td>120</td>
-<td>符号の取り違えや取消処理を通常実績として登録してしまうケース</td>
+<td>totalを-20へ変更。good/reject/yield_ratioは変更前の計算値を残します</td>
 </tr>
 <tr>
 <td><a href="#34-mes-reject-exceeds-total">34-mes-reject-exceeds-total</a></td>
 <td>異常 / MES 不良数が生産数を超える</td>
 <td>120</td>
-<td>不良実績の二重登録や集計単位の混在で、不良数が総数より大きくなる状態</td>
+<td>rejectを180へ変更。通常のtotalは100〜120です</td>
 </tr>
 <tr>
 <td><a href="#35-mes-impossible-yield">35-mes-impossible-yield</a></td>
 <td>異常 / MES 歩留まりが100%を超える</td>
 <td>120</td>
-<td>歩留まりの分母間違い、パーセントと比率の混同などを想定</td>
+<td>yield_ratioだけを1.2へ変更。total/good/rejectは正常のままです</td>
 </tr>
 <tr>
 <td><a href="#36-mes-orphan-work-order">36-mes-orphan-work-order</a></td>
 <td>異常 / MES 存在しない製造指図</td>
 <td>120</td>
-<td>MES実績がERPの指図マスターへ結合できないケース。連携順序のずれも想定します</td>
+<td>work_order_idをWO-MISSINGへ変更。通常の有効IDはparameters.valid_work_ordersに列挙しています</td>
 </tr>
 <tr>
 <td><a href="#37-mes-route-step-jump">37-mes-route-step-jump</a></td>
 <td>異常 / MES 工程番号の飛び</td>
 <td>120</td>
-<td>工程スキップ、ルート版の違い、手入力ミスで予定外の工程番号が記録される状態</td>
+<td>process_stepへ100を加えます。通常は0〜4の周期です</td>
 </tr>
 <tr>
 <td><a href="#38-erp-negative-stock">38-erp-negative-stock</a></td>
 <td>異常 / ERP マイナス在庫</td>
 <td>120</td>
-<td>出庫の先行連携、二重出庫、棚卸調整の誤りで在庫が負になるケース</td>
+<td>qty_on_handを-5へ変更。reserved/availableは元の値を残します</td>
 </tr>
 <tr>
 <td><a href="#39-erp-over-reservation">39-erp-over-reservation</a></td>
 <td>異常 / ERP 引当が在庫を超える</td>
 <td>120</td>
-<td>並行した指図引当や在庫更新の遅れにより、在庫以上に予約される状態</td>
+<td>reservedを2000へ変更。通常qty_on_handは100〜1000です</td>
 </tr>
 <tr>
 <td><a href="#40-erp-amount-discrepancy">40-erp-amount-discrepancy</a></td>
 <td>異常 / ERP 数量×単価と金額の不一致</td>
 <td>120</td>
-<td>丸め差、税区分、転記ミス、誤った再計算で請求金額が合わないケース</td>
+<td>amountへ0.01加算。quantityとunit_priceは変更しません</td>
 </tr>
 <tr>
 <td><a href="#41-erp-duplicate-document">41-erp-duplicate-document</a></td>
 <td>異常 / ERP 業務伝票の重複</td>
 <td>120</td>
-<td>取り込みの再実行や送信側リトライで、同じ伝票番号が別レコードとして届く状態</td>
+<td>20〜39件目のdocument_idを先頭行の番号に置き換えます。技術的なidは異なるため通常のPKでは検知できません</td>
 </tr>
 <tr>
 <td><a href="#42-erp-orphan-product">42-erp-orphan-product</a></td>
 <td>異常 / ERP 未登録の品目参照</td>
 <td>120</td>
-<td>品目マスターより先に明細が届く、または廃番・コード変換の誤りで結合に失敗するケース</td>
+<td>product_idをPRODUCT-MISSINGへ変更。通常の有効コードはparameters.valid_productsに列挙しています</td>
 </tr>
 <tr>
 <td><a href="#43-invalid-value-type">43-invalid-value-type</a></td>
 <td>異常 / 数値欄へ文字列が混入</td>
 <td>120</td>
-<td>機器が数値の代わりにエラー文字列を返す、CSV連携で型推論が崩れる状況</td>
+<td>valueへSENSOR_ERRORを入れ、型検証の迂回を明示的に有効化します</td>
 </tr>
 <tr>
 <td><a href="#44-missing-required-field">44-missing-required-field</a></td>
 <td>異常 / 必須項目そのものが欠落</td>
 <td>120</td>
-<td>ソースのスキーマ変更やシリアライズ不具合で、NULLではなくキー自体が消えるケース</td>
+<td>20〜39件目のvalueキーを削除します。JSON/ストリームは欠落、CSVは空セルになります</td>
 </tr>
 <tr>
 <td><a href="#45-stream-before-send-fault">45-stream-before-send-fault</a></td>
 <td>異常 / 配送 送信前の一時障害</td>
 <td>120</td>
-<td>outboxへ永続化できたが、ネットワークへ送る前に接続が失敗する状態</td>
+<td>2バッチ目の送信前に意図的に停止。最初の10件は配送済み、次の10件はpendingになる想定</td>
 </tr>
 <tr>
 <td><a href="#46-stream-ack-loss">46-stream-ack-loss</a></td>
 <td>異常 / 配送 ACK消失 / 重複再送</td>
 <td>120</td>
-<td>ブローカーには届いたが、送信側が配送済みと確定できない状況</td>
+<td>2バッチ目を送信しACKを受けた直後、outbox更新前に意図的な例外。再送時は同じrecord_keyが再配送されます</td>
 </tr>
 <tr>
 <td><a href="#47-stream-transient-retry">47-stream-transient-retry</a></td>
 <td>異常 / 配送 一過性の障害と自動再試行</td>
 <td>120</td>
-<td>1回だけ接続エラーが出て、次の試行で回復する状態</td>
+<td>2バッチ目の最初の送信前に1回だけ失敗。試行数3、待機200msで自動再試行します</td>
 </tr>
 <tr>
 <td><a href="#48-stream-backpressure-delay">48-stream-backpressure-delay</a></td>
 <td>異常 / 配送 遅延・バックプレッシャー</td>
 <td>120</td>
-<td>受信側が遅い状態に似た、送信前の待機を再現。ブローカーや外部ネットワーク自体は変更しません</td>
+<td>最初の3バッチの送信前に1秒ずつ待機します</td>
 </tr>
 </tbody>
 </table>

@@ -51,7 +51,7 @@ function notify(text, error = false) {
 }
 // 本文なしはGET、ありはJSON POSTで同一画面のAPIを呼ぶ。JSONを返し、HTTP失敗は詳細付き例外に変換する。
 async function api(path, body, headers = {}) {
-  const r = await fetch(
+  const r = await fetchWithOperationConfirmation(
     path,
     body === undefined
       ? {}
@@ -61,7 +61,9 @@ async function api(path, body, headers = {}) {
           body: JSON.stringify(body),
         },
   );
-  return readApiJson(r);
+  const data = await readApiJson(r);
+  showPreviewWarnings(path, data);
+  return data;
 }
 const action =
   /* ボタンを操作関数へ接続し、実行中の再操作防止と通知を共通化する。 */

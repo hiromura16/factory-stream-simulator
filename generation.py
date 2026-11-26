@@ -22,9 +22,10 @@ from config import RunSpec
 class GenerationError(ValueError):
     """生成設定の不備と、設定内で修正する位置を保持する。"""
 
-    def __init__(self, message, *, path=()):
+    def __init__(self, message, *, path=(), code="invalid_generation"):
         super().__init__(message)
         self.path = tuple(path)
+        self.code = code
 
 
 @contextmanager
@@ -35,10 +36,10 @@ def generation_context(*path):
     except GenerationError as exc:
         if exc.path:
             raise
-        raise GenerationError(str(exc), path=path) from None
+        raise GenerationError(str(exc), path=path, code=exc.code) from None
     except (ArithmeticError, IndexError, TypeError, ValueError):
         raise GenerationError(
-            "値の型・範囲・書式を確認してください", path=path
+            "値の型・範囲・書式を確認してください", path=path, code="invalid_generation_value"
         ) from None
 
 
@@ -98,18 +99,29 @@ def render(template, values):
                 "テンプレートは項目名と短い数値書式だけを参照できます"
             )
         if name not in values:
-            raise GenerationError("テンプレートで参照する項目が見つかりません")
+            raise GenerationError("テンプレートで参照する項目が見つかりません", code="template_field_not_found")
         value = values[name]
         if format_spec.endswith("d") and not isinstance(value, int):
-            raise GenerationError("整数書式 d では整数型の項目を参照してください")
+            raise GenerationError("整数書式 d では整数型の項目を参照してください", code="template_integer_format")
         try:
             parts.append(format(value, format_spec))
         except (TypeError, ValueError):
-            raise GenerationError("テンプレートの書式と参照先の型を合わせてください") from None
+            raise GenerationError("テンプレートの書式と参照先の型を合わせてください", code="template_field_format") from None
     result = "".join(parts)
     if len(result) > 8192:
         raise GenerationError("テンプレート結果が長すぎます")
     return result
+
+
+def _parse_iso_datetime(value):
+    """日時の書式に問題があれば、入力値を出さずに有効な例を返す。"""
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        raise GenerationError(
+            "タイムゾーン付きISO 8601の日時を指定してください（例：2026-12-01T08:00:00+09:00）",
+            code="invalid_datetime",
+        ) from None
 
 
 def coerce(value, field):
@@ -151,9 +163,9 @@ def coerce(value, field):
             raise GenerationError("真偽値の項目にはboolean生成を指定してください")
         return value
     if dtype == "datetime":
-        dt = datetime.fromisoformat(str(value))
+        dt = _parse_iso_datetime(value)
         if dt.tzinfo is None:
-            raise GenerationError("日時にはタイムゾーンが必要です")
+            raise GenerationError("日時にはタイムゾーンが必要です", code="datetime_timezone_required")
         return dt.astimezone(timezone.utc).isoformat()
     return value
 
@@ -220,7 +232,7 @@ def _generate_field(field, row, parameters, sequence, key, rng, input_key, path)
             value = resolve(getattr(field, name), parameters)
             return convert(value) if convert else value
         except GenerationError as exc:
-            raise GenerationError(str(exc), path=(*path, name)) from None
+            raise GenerationError(str(exc), path=(*path, name), code=exc.code) from None
         except (ArithmeticError, TypeError, ValueError):
             raise GenerationError("値の型と範囲を確認してください", path=(*path, name)) from None
 
@@ -289,9 +301,9 @@ def _generate_field(field, row, parameters, sequence, key, rng, input_key, path)
                 {**parameters, **row, "sequence": sequence, "record_id": key},
             )
         elif kind == "timestamp":
-            at = datetime.fromisoformat(str(get("start")))
+            at = _parse_iso_datetime(get("start"))
             if at.tzinfo is None:
-                raise GenerationError("開始日時にはタイムゾーンが必要です")
+                raise GenerationError("開始日時にはタイムゾーンが必要です", code="datetime_timezone_required")
             value = (at + timedelta(seconds=index * get("step", float))).isoformat()
         else:
             try:
@@ -340,7 +352,7 @@ def matches(left, operator, right):
         return left != right
     if operator == "in":
         if not isinstance(right, list):
-            raise GenerationError("in の比較値にはJSON配列を指定してください")
+            raise GenerationError("in の比較値にはJSON配列を指定してください", code="comparison_requires_array")
         return left in right
     if left is None or right is None:
         return False
@@ -379,6 +391,41 @@ def numeric_anomaly(original, value, operation, distance):
         if operation == "ramp":
             return number + amount * distance
         return number + amount
+
+def _copy_from_position(value):
+    """コピー元を取得し、指定漏れや負位置に修正方法を添える。"""
+    try:
+        anchor = int(value)
+    except (TypeError, ValueError, OverflowError):
+        raise GenerationError(
+            "コピー元の位置には0始まりの整数を指定してください",
+            code="copy_from_position_required",
+        ) from None
+    if anchor < 0:
+        raise GenerationError(
+            "コピー元のレコード位置は0以上にしてください",
+            code="copy_from_negative_position",
+        )
+    return anchor
+
+
+def anomaly_warnings(spec, *, prefix=()):
+    """数値に変換できない値が変化しないことを見本の利用者へ伝える。"""
+    field_types = {field.name: field.data_type for field in spec.fields}
+    return [
+        {
+            "code": "non_numeric_anomaly_field",
+            "loc": ["body", *prefix, "anomalies", index, "field"],
+            "msg": "加算・倍率・ドリフトは数値に適用されます。対象項目で数値に変換できない値や欠測値は変わりません。",
+        }
+        for index, rule in enumerate(spec.anomalies)
+        if rule.enabled
+        and rule.probability > 0
+        and rule.operation in {"add", "multiply", "ramp"}
+        and rule.field in field_types
+        and field_types[rule.field] not in {"integer", "number", "decimal"}
+    ]
+
 
 def inject_anomalies(spec, row, sequence, trace=None):
     """位置・確率・条件が一致した異常ルールを行へ順番に適用する。
@@ -439,9 +486,7 @@ def inject_anomalies(spec, row, sequence, trace=None):
                 elif rule.operation == "null":
                     result = None
                 elif rule.operation in {"freeze", "copy_from"}:
-                    anchor = rule.from_row if rule.operation == "freeze" else int(value)
-                    if anchor < 0:
-                        raise GenerationError("コピー元のレコード位置は0以上にしてください")
+                    anchor = rule.from_row if rule.operation == "freeze" else _copy_from_position(value)
                     result = generate_record(
                         spec, spec.start_sequence + anchor, apply_anomalies=False
                     )[rule.field]
@@ -449,7 +494,7 @@ def inject_anomalies(spec, row, sequence, trace=None):
                     if original is None:
                         continue
                     result = (
-                        datetime.fromisoformat(str(original)) + timedelta(seconds=float(value))
+                        _parse_iso_datetime(original) + timedelta(seconds=float(value))
                     ).isoformat()
                 else:
                     result = numeric_anomaly(

@@ -41,6 +41,16 @@ curl -fsS "$base/api/preview" \
 
 POSTには `Content-Type: application/json` を付けます。入力のない停止操作をcurlで呼ぶ場合は `--data '{}'` を付けます。ブラウザーからの変更操作は同一オリジンで実行します。
 
+## 実行前に接続先と操作を確認する
+
+外部の宛先への書き込み・送信、公開の開始、SQLのテーブル作成や行の変更には実行前の確認が必要です。プレビューと計画は生成・送信・書き込みを開始しません。
+
+1. 実行パス（例 `/api/runs`、`/api/table/prepare`、`/api/start`）と送信するJSONを `{"path":"…","payload":{…}}` の形で `POST /api/operations/plan` に渡します。
+2. 応答の `summary` にある操作、出力先、版、テーブル・件数を確認します。ログの開始URLに `profile_revision` を使う場合は、計画のJSONにも同じ値を指定します。
+3. `confirmation_required` が `true` のときは、同じ設定と `X-Operation-Confirmation` ヘッダーで実行します。トークンは短時間で失効し、1回だけ使用できます。設定または接続先の版が変わると再確認が必要です。
+
+428は確認が必要な応答です。CLIは `plan` コマンドで確認用ファイルを作成できます。
+
 ## エラーの見方
 
 | HTTP | 確認すること |
@@ -51,3 +61,7 @@ POSTには `Content-Type: application/json` を付けます。入力のない停
 | 500 | サーバー側の予期しないエラーです。再実行前に対象と履歴を確認します。 |
 
 [設定リファレンス](settings-reference.md) · [JSONの書き方](template-guide.md)
+
+[CLI・MCPの使い方](mcp.md)
+
+確認プランと実行には同じ管理APIの権限が必要です。トークンは送信内容と接続先の取り違えを防ぎます。管理権限を持つクライアントは計画と実行の両方を呼べるため、承認者を分ける運用では管理資格情報の配布も制限してください。MCPは既定で見本・検証・参照だけを公開します。

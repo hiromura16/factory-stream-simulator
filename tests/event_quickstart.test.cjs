@@ -44,15 +44,17 @@ test("同じ接続IDでも版が変われば旧プレビューで送信せず、
   });
   panel.querySelectorAll = () => [];
   vm.runInContext(source.slice(0, source.lastIndexOf("\ninit().catch(")), context);
+  const apiClient = readFileSync(join(__dirname, "../static/api-client.js"), "utf8");
+  vm.runInContext(apiClient, context);
   let attempts = 0;
   let refreshes = 0;
-  context.send = async (_path, spec, headers) => {
+  context.fetch = async (path, settings) => {
+    assert.equal(path, "/api/runs");
+    const spec = JSON.parse(settings.body);
     attempts++;
     assert.equal(spec.connection_revision, 2);
-    assert.equal(headers["X-Expected-Connection-Revision"], "2");
-    const error = new Error("stale");
-    error.status = 409;
-    throw error;
+    assert.equal(settings.headers["X-Expected-Connection-Revision"], "2");
+    return Response.json({ detail: "接続先が変更されました。" }, { status: 409 });
   };
   context.refresh = async () => {
     refreshes++;
@@ -68,7 +70,7 @@ test("同じ接続IDでも版が変われば旧プレビューで送信せず、
   assert.ok(!vm.runInContext("isPreviewCurrent(streamActionSnapshot())", context));
   vm.runInContext("state.previewedDestination = streamActionSnapshot()", context);
   await assert.rejects(
-    vm.runInContext('guardedStreamAction("/api/runs", streamActionSnapshot(), send, refresh)', context),
+    vm.runInContext('guardedStreamAction("/api/runs", streamActionSnapshot(), api, refresh)', context),
     /プレビューし直して/,
   );
   assert.equal(attempts, 1);
