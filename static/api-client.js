@@ -69,6 +69,31 @@ async function fetchWithOperationConfirmation(path, settings) {
     "接続先：" + destination + "（版 " + plannedRevision + "）",
   ];
   if (destination_kind) lines.push("接続の種類：" + destination_kind);
+  const auth = {
+    none: "認証なし",
+    anonymous: "匿名",
+    username: "ユーザー名・パスワード",
+    basic: "Basic認証",
+    bearer: "Bearerトークン",
+    api_key: "APIキー（X-API-Key）",
+  };
+  if (plan.summary.listeners) {
+    if (!plan.summary.listeners.length) lines.push("設備プロトコルの待受：なし");
+    for (const listener of plan.summary.listeners) {
+      const security = listener.security === "sign_encrypt" ? "・署名と暗号化あり" : "";
+      const access = listener.writable ? "読取・書込" : "読取のみ";
+      lines.push(
+        listener.protocol + " 待受（アプリ内）：" + listener.address,
+        "　" + auth[listener.auth_mode] + security + "、" + access,
+      );
+    }
+  }
+  if (plan.summary.source_api) {
+    const { auth_mode, resources, paths } = plan.summary.source_api;
+    lines.push("取得APIの認証：" + auth[auth_mode], "公開経路（このWebアプリ）：");
+    for (const endpoint of paths) lines.push("　" + endpoint.methods.join(" / ") + " " + endpoint.path);
+    if (resources.length) lines.push("コレクション名：" + resources.join("、"));
+  }
   if (table) {
     const tableName = payload.sql?.schema_name ? table : table + "（接続先の既定スキーマ）";
     lines.push("対象テーブル：" + tableName);

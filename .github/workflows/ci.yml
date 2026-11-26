@@ -25,6 +25,7 @@ jobs:
         run: |
           uv run --frozen --with markdown-it-py==4.0.0 python scripts/build_help.py --check
           uv run --frozen python scripts/check_shared.py
+          uvx ruff@0.17.6 check --select E4,E7,E9,F .
       - if: matrix.python == '3.12'
         run: docker build -t factory-source:test .
       - name: Smoke-test the built container

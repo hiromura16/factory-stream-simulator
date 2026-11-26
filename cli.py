@@ -5,13 +5,22 @@ import ipaddress
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
+import tempfile
 from base64 import b64encode
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+
+try:
+    import fcntl
+except ImportError:  # Windows does not provide directory locks.
+    fcntl = None
+
 
 APP_PORTS = {
     "sql": 3560,
@@ -325,18 +334,102 @@ class FactoryClient:
         return f"{path}?profile_revision={revision}"
 
 
-def save_token(path, token):
-    """トークンを標準出力に出さず、既存ファイルを上書きしない。"""
+@contextmanager
+def approval_directory_lock(path):
+    """POSIX上で、確認ファイルを扱うCLIとMCPの短い操作を直列化する。"""
+    if fcntl is None:
+        yield
+        return
+    descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def approval_identity(path):
+    """パスをたどらず、書き換えと差し替えを識別する情報を返す。"""
+    return approval_signature(path.lstat())
+
+
+def approval_signature(info):
+    """読み取り時に変わるアクセス時刻を照合から外す。"""
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def read_approval(path):
+    """確認ファイルそのものを読み、使用後の照合情報を取得する。"""
+    try:
+        with approval_directory_lock(path):
+            initial = path.lstat()
+            if not stat.S_ISREG(initial.st_mode):
+                raise ClientError("確認ファイルには通常のファイルを指定してください")
+            if os.name == "posix" and initial.st_mode & 0o077:
+                raise ClientError("確認トークンファイルの権限を0600にしてください")
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+            descriptor = os.open(path, flags | getattr(os, "O_BINARY", 0))
+            with os.fdopen(descriptor, "rb") as file:
+                identity = approval_signature(initial)
+                if approval_signature(os.fstat(file.fileno())) != identity:
+                    raise ClientError("確認ファイルが変更されました。もう一度確認してください")
+                raw = file.read(4099)
+                if len(raw) > 4098:
+                    raise ClientError("確認ファイルに有効なトークンがありません")
+                token = raw.removesuffix(b"\n").removesuffix(b"\r").decode("ascii")
+                if approval_identity(path) != identity:
+                    raise ClientError("確認ファイルが変更されました。もう一度確認してください")
+            if not TOKEN.fullmatch(token):
+                raise ClientError("確認ファイルに有効なトークンがありません")
+            return token, identity
+    except FileNotFoundError:
+        raise ClientError("実行には人が発行した確認ファイルが必要です") from None
+    except (OSError, UnicodeError):
+        raise ClientError("確認ファイルを読めません。パスと権限を確認してください") from None
+
+
+def discard_approval(path, identity):
+    """成功した要求で読んだファイルだけを取り除き、片付けの成否を返す。"""
+    try:
+        with approval_directory_lock(path):
+            if approval_identity(path) == identity:
+                path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    return True
+
+
+def save_token(path, token, *, original=None):
+    """通常は新規作成し、明示した再発行では照合後に原子的に置き換える。"""
     if not isinstance(token, str) or not TOKEN.fullmatch(token):
         raise ClientError("APIが有効な確認トークンを返しませんでした")
     try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as file:
-            file.write(token + "\n")
-    except OSError:
+        with approval_directory_lock(path):
+            if original is None:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as file:
+                    file.write(token + "\n")
+                return
+            if approval_identity(path) != original:
+                raise ClientError("確認ファイルが変更されました。現在のファイルを確認してください")
+            with tempfile.NamedTemporaryFile(
+                "w", encoding="utf-8", dir=path.parent, prefix=".confirmation-", delete=False
+            ) as file:
+                staged = Path(file.name)
+                try:
+                    file.write(token + "\n")
+                    file.close()
+                    staged.replace(path)
+                finally:
+                    staged.unlink(missing_ok=True)
+    except FileExistsError:
         raise ClientError(
-            "確認ファイルを作成できません。存在しないファイル名を指定してください"
+            "確認ファイルには存在しない名前を指定してください。再発行には plan --replace を使えます"
         ) from None
+    except OSError:
+        raise ClientError("確認ファイルを保存できません。パスと権限を確認してください") from None
 
 
 def main(argv=None):
@@ -379,12 +472,17 @@ def main(argv=None):
         help="planで作る、または実行時に読む確認ファイル",
     )
     p.add_argument(
+        "--replace", action="store_true", help="planで既存の確認ファイルを再発行"
+    )
+    p.add_argument(
         "--profile-revision", type=int, help="ログのplan/startに使うプロファイル版"
     )
     p.add_argument(
         "--compact", action="store_true", help="validate結果を既定値省略JSONで出力"
     )
     a = p.parse_intermixed_args(argv)
+    if a.replace and a.action != "plan":
+        p.error("--replace は plan でだけ使えます")
     try:
         if a.action == "validate":
             if not (a.file or a.spec) or (a.file and a.spec):
@@ -432,10 +530,13 @@ def main(argv=None):
                         raise ClientError(
                             "確認の計画にはHTTPSまたはループバックURLを指定してください"
                         )
-                    if a.confirmation_file.exists():
-                        raise ClientError(
-                            "確認ファイルにはまだ存在しないファイル名を指定してください"
-                        )
+                    original = None
+                    if os.path.lexists(a.confirmation_file):
+                        if not a.replace:
+                            raise ClientError(
+                                "確認ファイルには存在しない名前を指定してください。再発行には plan --replace を使えます"
+                            )
+                        _, original = read_approval(a.confirmation_file)
                     client.check_kind()
                     plan = {"path": path, "payload": body, "force_confirmation": True}
                     if a.profile_revision is not None:
@@ -447,7 +548,7 @@ def main(argv=None):
                         )
                     token = result.pop("confirmation_token", None)
                     if token is not None:
-                        save_token(a.confirmation_file, token)
+                        save_token(a.confirmation_file, token, original=original)
                         result["confirmation_saved"] = True
                 else:
                     token = (

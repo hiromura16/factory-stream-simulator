@@ -11,8 +11,9 @@ from cli import (
     ClientError,
     FactoryClient,
     credentials_from_env,
+    discard_approval,
+    read_approval,
     read_json,
-    secret_file,
 )
 
 VERSIONS = ("2025-11-25", "2025-06-18")
@@ -287,13 +288,19 @@ class StdioServer:
             if name == "start" and arguments.get("execute") is True:
                 if confirmation_file is None:
                     raise ClientError("実行には運用者が設定した確認ファイルが必要です")
-                token = secret_file(confirmation_file, require_private=True)
                 path = client.with_revision(
                     client.mutation_path("start"), arguments.get("profile_revision")
                 )
+                token, identity = read_approval(confirmation_file)
                 client.check_kind()
                 client.check_confirmation_available()
-                return status_summary(client.request(path, spec, token))
+                status = status_summary(client.request(path, spec, token))
+                if not discard_approval(confirmation_file, identity):
+                    status["confirmation_file_warning"] = (
+                        "開始を受け付けましたが確認ファイルを削除できませんでした。"
+                        "権限を確認してから人が plan --replace で再発行してください"
+                    )
+                return status
             if arguments.get("profile_revision") is not None:
                 raise RpcError(
                     -32602, "profile_revision はログの実開始にだけ指定してください"

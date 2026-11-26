@@ -10,6 +10,7 @@ from threading import Lock
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field, ValidationError
 
 CONFIRMATION_HEADER = "X-Operation-Confirmation"
@@ -27,6 +28,14 @@ POLICY = {
 JOB_KINDS = {"files", "sql", "stream"}
 TTL_SECONDS = 120
 MAX_PENDING = 256
+CONFIRMATION_ERRORS = {
+    "confirmation_required": "操作の確認が必要です。計画で接続先と操作を確認してください。",
+    "confirmation_invalid": "確認を利用できません。未発行・使用済みなどの場合は、確認計画を作り直してください。",
+    "confirmation_expired": "確認の有効期限が切れました。確認計画を作り直してください。",
+    "confirmation_mismatch": "操作・設定・接続先の版のいずれかが確認計画と異なります。現在の内容で確認し直してください。",
+}
+SOURCE_PATHS = ("/source/rest/", "/source/odata/", "/source/history/")
+HTTP_METHODS = ("GET", "POST", "PATCH", "DELETE")
 
 
 class OperationPlan(BaseModel):
@@ -46,14 +55,53 @@ class Operation:
     summary: dict
 
 
+def equipment_listeners(spec, profile):
+    """Describe the protocols that the equipment driver will listen on."""
+    listeners = []
+    if profile.opc_enabled:
+        listeners.append({
+            "protocol": "OPC UA",
+            "address": f"opc.tcp://0.0.0.0:{profile.opc_port}/factory/",
+            "auth_mode": profile.opc_auth,
+            "security": profile.opc_security,
+            "writable": spec.equipment.writable,
+        })
+    if profile.modbus_enabled:
+        listeners.append({
+            "protocol": "Modbus TCP",
+            "address": f"0.0.0.0:{profile.modbus_port}",
+            "auth_mode": "none",
+            "writable": spec.equipment.writable,
+        })
+    return listeners
+
+
 class OperationGate:
     """Resolve immutable destination revisions and issue bounded, single-use tokens."""
 
-    def __init__(self, kind, store):
+    def __init__(self, kind, store, app):
         self.kind = kind
         self.store = store
+        self.app = app
         self.pending = OrderedDict()
         self.lock = Lock()
+
+    def source_api(self, spec, profile):
+        """Summarize registered data routes and the selected profile's access rules."""
+        methods_by_path = {}
+        for route in self.app.routes:
+            if isinstance(route, APIRoute) and route.path.startswith(SOURCE_PATHS):
+                methods_by_path.setdefault(route.path, set()).update(route.methods)
+        methods = HTTP_METHODS if profile.allow_writes else ("GET",)
+        return {
+            "auth_mode": profile.auth_mode,
+            "resources": [resource.name for resource in spec.business.resources],
+            "paths": [
+                {"path": path, "methods": [method for method in methods if method in registered]}
+                for path, registered in methods_by_path.items()
+                if any(method in registered for method in methods)
+            ],
+        }
 
     def assess(self, path, spec, requested_revision=None):
         """Read a destination snapshot and derive its confirmation requirements."""
@@ -82,7 +130,11 @@ class OperationGate:
             "operation": label, "destination_id": identity,
             "destination_name": profile.name, "revision": actual_revision,
         }
-        if output:
+        if self.kind == "equipment":
+            summary["listeners"] = equipment_listeners(spec, profile)
+        elif self.kind in {"api", "historian"}:
+            summary["source_api"] = self.source_api(spec, profile)
+        elif output:
             summary["destination_kind"] = output
         if self.kind in JOB_KINDS:
             summary["rows"] = spec.limit if path == "/api/outbox/retry" else spec.rows
@@ -119,10 +171,9 @@ class OperationGate:
         """Create a short-lived authorization bound to the submitted data."""
         with self.lock:
             now = time.monotonic()
-            while self.pending:
-                first = next(iter(self.pending))
-                if self.pending[first][0] > now and len(self.pending) < MAX_PENDING:
-                    break
+            # Retain expired entries within the bound so an old token can
+            # still be distinguished from a different or consumed one.
+            if len(self.pending) >= MAX_PENDING:
                 self.pending.popitem(last=False)
             token = secrets.token_urlsafe(32)
             self.pending[token] = (now + TTL_SECONDS, operation.fingerprint)
@@ -134,17 +185,29 @@ class OperationGate:
             return
         with self.lock:
             stored = self.pending.get(token) if token else None
-            if stored and stored[0] > time.monotonic() and stored[1] == operation.fingerprint:
+            if token is None:
+                code = "confirmation_required"
+            elif stored is None:
+                code = "confirmation_invalid"
+            elif stored[0] <= time.monotonic():
+                code = "confirmation_expired"
+            elif stored[1] != operation.fingerprint:
+                code = "confirmation_mismatch"
+            else:
                 self.pending.pop(token)
                 return
-        raise HTTPException(
-            428, "操作の確認が必要です。計画で接続先と操作を確認してから実行してください。"
-        )
+        raise HTTPException(428, [{
+            "loc": ["header", CONFIRMATION_HEADER],
+            "location": "実行前の確認",
+            "type": "operation_confirmation",
+            "code": code,
+            "msg": CONFIRMATION_ERRORS[code],
+        }])
 
 
 def install_operation_gate(app: FastAPI, kind, store, spec_model, retry_model=None, *, validate=None):
     """Register the side-effect-free plan API and return the gate used by writes."""
-    gate = OperationGate(kind, store)
+    gate = OperationGate(kind, store, app)
 
     @app.post(
         PLAN_PATH,
