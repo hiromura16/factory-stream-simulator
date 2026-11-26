@@ -13,4 +13,5 @@ jobs:
       - run: uv run pytest -q
       - run: python -m compileall -q app.py factorylib.py producer.py scripts
       - run: node --check static/app.js
+      - run: node --test tests/job_history.test.cjs
       - run: docker build -t factory-source:test .
