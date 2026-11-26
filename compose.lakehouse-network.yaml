@@ -12,7 +12,6 @@
     },
     "mqtt": {
       "networks": {
-        "default": {},
         "lakehouse": {
           "aliases": [
             "factory-stream-mqtt"

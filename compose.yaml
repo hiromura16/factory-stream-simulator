@@ -35,7 +35,7 @@
         "TZ": "Asia/Tokyo",
         "DATA_DIR": "/data",
         "MIN_AVAILABLE_GIB": "${MIN_AVAILABLE_GIB:-6}",
-        "MQTT_HOST": "${MQTT_HOST:-mqtt}",
+        "MQTT_HOST": "${MQTT_HOST:-factory-stream-mqtt}",
         "MQTT_PORT": "${MQTT_PORT:-1883}",
         "MQTT_USERNAME": "factory",
         "MQTT_PASSWORD_FILE": "/run/secrets/mqtt-password",
@@ -70,6 +70,11 @@
       }
     },
     "mqtt": {
+      "networks": {
+        "default": {
+          "aliases": ["factory-stream-mqtt"]
+        }
+      },
       "image": "eclipse-mosquitto:2.0.22",
       "user": "1000:1000",
       "restart": "unless-stopped",

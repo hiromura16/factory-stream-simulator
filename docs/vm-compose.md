@@ -37,7 +37,7 @@ ssh -N -L 3562:127.0.0.1:3562 user@vm-address
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
-curl -fsS http://127.0.0.1:3562/healthz
+curl -fsS --retry 12 --retry-connrefused --retry-delay 1 --max-time 5 http://127.0.0.1:3562/healthz
 curl -fsS http://127.0.0.1:3562/api/runs
 ```
 
@@ -56,7 +56,16 @@ docker compose -f compose.yaml -f compose.lakehouse-network.yaml config --quiet
 docker compose -f compose.yaml -f compose.lakehouse-network.yaml up -d --build
 ```
 
+管理画面と操作APIにはログインがありません。ホスト側で `127.0.0.1` にバインドしても、共有ネットワークの参加コンテナは管理画面と操作APIに到達できます。信頼済みの収集・試験サービス専用のネットワークを使います。
+
 既定のプロジェクト内ネットワークも残ります。共有ネットワーク上では専用の別名 `factory-stream-simulator` とコンテナ側のポートを使います。同梱MQTTのVM側ポートは3563です。別Composeの受信側と共有ネットワークを使う場合、同梱MQTTのアドレスは `factory-stream-mqtt:1883` です。
+
+### 既存の同梱MQTTを共有ネットワークへつなぐ
+
+1. 従来の設定と通常構成で送信ジョブを停止します。「実行履歴」の「未配送分を再送」で、同梱MQTT宛ての残りを処理します。「永続 outbox」の `counts.pending` が0、または `pending` 自体が省略されていることを確認します。未配送が残っている間は切り替えを保留します。ホスト名を変更すると、旧接続宛ての未配送分は新しい接続設定で再送できません。
+2. 上の共有ネットワーク指定を使う前に、通常構成で新しいComposeを起動します。これで同梱ブローカーに `factory-stream-mqtt` の別名が付きます。
+3. 同梱MQTTを使う `.env` の `MQTT_HOST` と、「接続先」に保存済みの同梱MQTTプロファイルのホストを、その別名に揃えます。ホストを変えると保存済みのパスワードが引き継がれないため、`MQTT_PASSWORD_FILE` に設定したものと同じパスワードを画面のパスワード欄に入力し、保存して接続を確認します。外部MQTTの設定はそのサーバーの接続先を使います。
+4. 接続確認後に、この節の共有ネットワーク構成で起動します。
 
 ## 停止・更新
 
