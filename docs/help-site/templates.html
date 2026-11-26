@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JSONの書き方 | ストリーム送信</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/help.css">
+  <script src="/static/help.js" defer></script>
+</head>
+<body class="help-page">
+  <a class="help-skip" href="#help-content">本文へ移動</a>
+  <div class="help-top">
+    <a class="help-home" href="/">ストリーム送信</a>
+    <a href="/">アプリに戻る</a>
+  </div>
+  <div class="help-layout">
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html" aria-current="page">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/mcp.html">CLI・MCP</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
+    <main class="help-content" id="help-content">
+      <nav class="help-outline" aria-label="このページ"><a href="#最初は使うキ-だけ書く">最初は使うキーだけ書く</a><a href="#項目を増やす">項目を増やす</a><a href="#異常を一つ追加する">異常を一つ追加する</a><a href="#見本とオフライン検証">見本とオフライン検証</a><a href="#書き出しの大きさを選ぶ">書き出しの大きさを選ぶ</a><a href="#エディタ-の補完">エディターの補完</a><a href="#修正箇所が分からないとき">修正箇所が分からないとき</a></nav>
+      <article><h1>ひな型をJSONで作る</h1>
+<h2 id="最初は使うキ-だけ書く">最初は使うキーだけ書く</h2>
+<p>JSONは設定をファイルで保存、共有、自動処理するときに使えます。省略可能な値はアプリが補います。このアプリで使う項目一覧は <code>fields</code> です。<a href="/help/examples/stream-beginner.json">最小構成の例</a>をコピーして見本を確認します。</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;設備テレメトリ / ライン別トピック / 欠測あり&quot;,
+  &quot;description&quot;: &quot;【想定】設備がMQTTでテレメトリを送る。トピックはライン・設備ごと。\n【異常】電流が2%欠測。100〜149件目で振動値が固着。&quot;,
+  &quot;run_key&quot;: &quot;telemetry-001&quot;,
+  &quot;seed&quot;: 11,
+  &quot;rows&quot;: 3,
+  &quot;target_rate&quot;: 20,
+  &quot;batch_size&quot;: 50,
+  &quot;parameters&quot;: {
+    &quot;start_time&quot;: &quot;2026-12-01T00:00:00+09:00&quot;,
+    &quot;lines&quot;: [
+      &quot;L1&quot;,
+      &quot;L2&quot;
+    ]
+  },
+  &quot;fields&quot;: [
+    {
+      &quot;name&quot;: &quot;event_id&quot;,
+      &quot;data_type&quot;: &quot;string&quot;,
+      &quot;generator&quot;: &quot;record_id&quot;,
+      &quot;primary_key&quot;: true,
+      &quot;length&quot;: 64
+    },
+    {
+      &quot;name&quot;: &quot;line&quot;,
+      &quot;data_type&quot;: &quot;string&quot;,
+      &quot;generator&quot;: &quot;choice&quot;,
+      &quot;choices&quot;: &quot;$lines&quot;,
+      &quot;length&quot;: 8
+    },
+    {
+      &quot;name&quot;: &quot;machine_no&quot;,
+      &quot;data_type&quot;: &quot;integer&quot;,
+      &quot;generator&quot;: &quot;integer&quot;,
+      &quot;minimum&quot;: 1,
+      &quot;maximum&quot;: 5
+    },
+    {
+      &quot;name&quot;: &quot;machine_id&quot;,
+      &quot;data_type&quot;: &quot;string&quot;,
+      &quot;generator&quot;: &quot;template&quot;,
+      &quot;template&quot;: &quot;M-{machine_no:02d}&quot;,
+      &quot;length&quot;: 8
+    },
+    {
+      &quot;name&quot;: &quot;vibration&quot;,
+      &quot;data_type&quot;: &quot;number&quot;,
+      &quot;generator&quot;: &quot;normal&quot;,
+      &quot;mean&quot;: 2.0,
+      &quot;stddev&quot;: 0.3,
+      &quot;scale&quot;: 3
+    },
+    {
+      &quot;name&quot;: &quot;current_a&quot;,
+      &quot;data_type&quot;: &quot;number&quot;,
+      &quot;generator&quot;: &quot;uniform&quot;,
+      &quot;minimum&quot;: 10,
+      &quot;maximum&quot;: 12,
+      &quot;scale&quot;: 2,
+      &quot;null_probability&quot;: 0.02
+    },
+    {
+      &quot;name&quot;: &quot;at&quot;,
+      &quot;data_type&quot;: &quot;datetime&quot;,
+      &quot;generator&quot;: &quot;timestamp&quot;,
+      &quot;start&quot;: &quot;$start_time&quot;,
+      &quot;step&quot;: 1
+    }
+  ],
+  &quot;anomalies&quot;: [
+    {
+      &quot;name&quot;: &quot;振動の固着&quot;,
+      &quot;field&quot;: &quot;vibration&quot;,
+      &quot;operation&quot;: &quot;freeze&quot;,
+      &quot;from_row&quot;: 100,
+      &quot;to_row&quot;: 149
+    }
+  ],
+  &quot;stream&quot;: {
+    &quot;envelope&quot;: true,
+    &quot;metadata_key&quot;: &quot;_source&quot;,
+    &quot;topic_template&quot;: &quot;factory/{line}/{machine_id}/telemetry&quot;,
+    &quot;payload_template&quot;: {
+      &quot;id&quot;: &quot;$row.event_id&quot;,
+      &quot;machine&quot;: {
+        &quot;line&quot;: &quot;$row.line&quot;,
+        &quot;id&quot;: &quot;$row.machine_id&quot;
+      },
+      &quot;metrics&quot;: {
+        &quot;vibration&quot;: &quot;$row.vibration&quot;,
+        &quot;current_a&quot;: &quot;$row.current_a&quot;
+      },
+      &quot;ts&quot;: &quot;$row.at&quot;
+    }
+  }
+}
+</code></pre>
+<h2 id="項目を増やす">項目を増やす</h2>
+<ol>
+<li><code>fields</code> の要素に名前 <code>name</code>、型 <code>data_type</code>、生成方法 <code>generator</code> を指定します。</li>
+<li>参照される項目を上に置きます。たとえば整数の <code>line_no</code> を先に定義し、その後で <code>EQ-{line_no:03d}</code> を使う文字列項目を定義します。</li>
+<li>日時は <code>+09:00</code> または <code>Z</code> のようなタイムゾーンを付けます。出力はUTCに揃います。小数の丸め桁は <code>scale</code>、精度を保つ文字列になる型は <code>decimal</code> です。</li>
+<li><code>anomalies</code> は正常値を作った後、記述順に適用します。位置は0始まりのレコード番号です。範囲の前後も見本で確認します。</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>作りたいもの</th>
+<th>生成器</th>
+<th>使うキー</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>行を見分けるID</td>
+<td>record_id / uuid</td>
+<td>run_key、seed、通番。文字列の長さはそれぞれ32または36以上。</td>
+</tr>
+<tr>
+<td>連番</td>
+<td>sequence</td>
+<td>start、step、group_size、modulo。整数なら data_type を integer にします。</td>
+</tr>
+<tr>
+<td>範囲内の値</td>
+<td>integer / uniform</td>
+<td>minimum と maximum。整数と小数の型を合わせます。</td>
+</tr>
+<tr>
+<td>平均周辺の値</td>
+<td>normal</td>
+<td>mean と stddev。小数型を使います。</td>
+</tr>
+<tr>
+<td>候補や真偽値</td>
+<td>choice / boolean</td>
+<td>choices と必要に応じて weights。または probability。</td>
+</tr>
+<tr>
+<td>固定の値</td>
+<td>constant</td>
+<td>value に型と合うJSON値を入れます。</td>
+</tr>
+<tr>
+<td>記号やコード</td>
+<td>template</td>
+<td>template で上にある項目を参照します。</td>
+</tr>
+<tr>
+<td>等間隔の日時</td>
+<td>timestamp</td>
+<td>start にタイムゾーン付き日時、step に秒数。</td>
+</tr>
+<tr>
+<td>コピーや計算</td>
+<td>reference / sum / difference / product / ratio</td>
+<td>先に作る項目を sources に入れます。ratioの分母は0を避けます。</td>
+</tr>
+</tbody>
+</table>
+<p><code>choice</code> の <code>weights</code> は数値の配列です。選択肢と重みの数を揃えます。 <code>number</code> は既定で小数3桁までに丸めます。<code>data_type</code> を省くとstringになるため、比較や書き込みに必要な型を明示します。</p>
+<h2 id="異常を一つ追加する">異常を一つ追加する</h2>
+<p>数値の一時上昇は <code>add</code>、連続したドリフトは <code>ramp</code>、固着は <code>freeze</code>、欠測は <code>null</code>、項目の欠落は <code>omit</code> を選びます。<code>when</code> の <code>in</code> に候補を書くときは <code>[&quot;RUN&quot;,&quot;IDLE&quot;]</code> のように配列を指定します。</p>
+<h2 id="見本とオフライン検証">見本とオフライン検証</h2>
+<p>アプリでJSONを画面に適用し、見本を開きます。アプリが起動していないときでもPython環境から検証できます。</p>
+<pre><code class="language-sh">uv run --frozen python scripts/validate_template.py docs/examples/stream-beginner.json
+</code></pre>
+<p>見本とオフライン検証は、代表位置と異常の境界を調べます。少量で実行して、対象のファイル・テーブル・公開・配送の結果を確認します。</p>
+<h2 id="書き出しの大きさを選ぶ">書き出しの大きさを選ぶ</h2>
+<p>「JSONを書き出す」の「既定値を省略」を選ぶと、既定と異なる設定を中心に保存できます。省略したキーは読み込むアプリが補います。設定時点の値を細部まで固定して保管したい場合は、チェックを外して書き出します。</p>
+<h2 id="エディタ-の補完">エディターの補完</h2>
+<p>VS Codeでリポジトリを開き、設定の <code>json.schemas</code> で作業ファイルを <code>contracts/preset.schema.json</code> に関連付けます。例えばリポジトリの <code>.vscode/settings.json</code> に次の設定を入れると、<code>drafts/</code> のJSONが補完対象になります。</p>
+<pre><code class="language-json">{
+  &quot;json.schemas&quot;: [{
+    &quot;fileMatch&quot;: [&quot;/drafts/*.json&quot;],
+    &quot;url&quot;: &quot;./contracts/preset.schema.json&quot;
+  }]
+}
+</code></pre>
+<p>テンプレートの <code>$schema</code> でも契約を指定できます。<code>_comment</code> は編集用の注記です。共有するひな型の用途は <code>name</code> と <code>description</code> に書きます。</p>
+<h2 id="修正箇所が分からないとき">修正箇所が分からないとき</h2>
+<table>
+<thead>
+<tr>
+<th>表示</th>
+<th>最初に確認すること</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>知らないキー</td>
+<td>プレビューに出た場所を<a href="/help/settings.html">設定リファレンス</a>で引き、略さず正式なJSONキーを書く。</td>
+</tr>
+<tr>
+<td>項目の型と値が合わない</td>
+<td>その項目の型を見て、候補、書式、日時の入力を合わせる。</td>
+</tr>
+<tr>
+<td>参照する項目が見つからない</td>
+<td>名前・大文字小文字を確認し、使う項目より上に定義する。</td>
+</tr>
+<tr>
+<td>APIで出力内容が異なる</td>
+<td>使うアプリの専用セクション、接続設定のIDと実行時の版を照合する。</td>
+</tr>
+</tbody>
+</table>
+<p><a href="/help/presets.html">ひな型を選ぶ・作る</a> · <a href="/help/ai.html">AIにひな型を頼む</a></p>
+</article>
+    </main>
+  </div>
+</body>
+</html>

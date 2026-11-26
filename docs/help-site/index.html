@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>初めて使う | ストリーム送信</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/help.css">
+  <script src="/static/help.js" defer></script>
+</head>
+<body class="help-page">
+  <a class="help-skip" href="#help-content">本文へ移動</a>
+  <div class="help-top">
+    <a class="help-home" href="/">ストリーム送信</a>
+    <a href="/">アプリに戻る</a>
+  </div>
+  <div class="help-layout">
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html" aria-current="page">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/mcp.html">CLI・MCP</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
+    <main class="help-content" id="help-content">
+      <nav class="help-outline" aria-label="このページ"><a href="#最初に試すこと">最初に試すこと</a><a href="#よくある質問">よくある質問</a><a href="#停止と再起動">停止と再起動</a><a href="#想定した結果が出ないとき">想定した結果が出ないとき</a><a href="#送信先の名前と本文を組み立てる">送信先の名前と本文を組み立てる</a><a href="#次に読む">次に読む</a></nav>
+      <article><h1>ストリーム送信シミュレーター 操作マニュアル</h1>
+<p>生成した温度・設備状態・工程進捗・アラームのイベントで、受信側の振り分け、パース、重複排除を検証します。同梱MQTT、登録した配送先、またはローカル記録を選べます。</p>
+<h2 id="最初に試すこと">最初に試すこと</h2>
+<p><strong>温度イベント3件を送信先に出さずにローカルへ記録する</strong>。元イベントは3件です。重複率を1にした試験では重複を含めて6件が記録されます。</p>
+<p><a href="/help/install.html">Docker Compose導入手順</a>で準備し、VMで <code>http://127.0.0.1:3562/</code> を開きます。</p>
+<p>イベントは設備の状態や温度など、ある時点の出来事を表すデータです。最初は「ローカル記録」を使います。MQTTを試す段階では、ブローカー（受け渡し役）と同じトピック（振り分け先の名前）を送信側と受信側に設定します。</p>
+<ol>
+<li>「イベントを送る」で「温度センサーイベント」を選びます。選ぶと本文の例が入ります。</li>
+<li>送信先に「ローカル記録」、件数に <code>3</code> を指定します。「詳細設定」の本文と配送の設定で、本文サイズの下限を <code>256</code>、重複率を <code>1</code> にします。</li>
+<li>「送信内容の見本を見る」を押し、<code>temperature_c</code>、本文サイズと重複予定を確認します。</li>
+<li>「送信を開始」を押して「実行履歴」を開きます。完了、元件数、記録した重複を確認します。MQTTへ切り替える場合は対象トピックを先に購読してから送ります。</li>
+</ol>
+<p><a href="/help/images/operation-guide.png"><img src="/help/images/operation-guide.png" alt="最初の操作と確認箇所" loading="lazy" /></a></p>
+<h2 id="よくある質問">よくある質問</h2>
+<h3 id="ブロ-カ-が起動したら送信も始まりますか">ブローカーが起動したら送信も始まりますか？</h3>
+<p>アプリの画面で送信を開始するとイベントが出ます。ブローカーは先に待ち受けていて構いません。</p>
+<h3 id="送信成功なのに受信側で見つかりません">送信成功なのに受信側で見つかりません</h3>
+<p>トピック、先に購読を始めたか、受信側のエラーを確認します。ブローカーの受付と、受信アプリが処理を終えたことは別の結果です。</p>
+<h3 id="outboxはどこで見ますか">outboxはどこで見ますか？</h3>
+<p>「実行履歴」に未配送を確認する欄があります。再送前に元の接続先を照合します。</p>
+<h2 id="停止と再起動">停止と再起動</h2>
+<p>ジョブは設定件数で終了します。ブローカーにメッセージが届いても、後段で処理が完了したかは受信側で照合します。</p>
+<h2 id="想定した結果が出ないとき">想定した結果が出ないとき</h2>
+<p>メッセージが見つからなければ、先に購読を開始したか、トピック、ポート、接続先の認証・TLSが一致するかを確認します。</p>
+<h2 id="送信先の名前と本文を組み立てる">送信先の名前と本文を組み立てる</h2>
+<table>
+<thead>
+<tr>
+<th>設定</th>
+<th>役割</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>topic_template</td>
+<td>MQTTなどで受け取る宛先名を合成します。同じ名前で購読します。</td>
+</tr>
+<tr>
+<td>payload_template</td>
+<td>生成した行から、送るJSON本文の構造を組み立てます。</td>
+</tr>
+<tr>
+<td>envelope</td>
+<td>メタデータ付きの本文にします。有効時は本文がJSONオブジェクトになり、既定のメタデータキーは _source です。</td>
+</tr>
+</tbody>
+</table>
+<p>「実行履歴」→「ローカル記録の本文を見る」で、送信先をローカルにしたイベントの本文を開けます。表示中のページをJSON Linesとしてダウンロードできます。同じIDでも外部へ配送した記録はこの一覧の対象から外れます。</p>
+<h2 id="次に読む">次に読む</h2>
+<ul>
+<li><a href="/help/presets.html">ひな型を選ぶ・作る</a></li>
+<li><a href="/help/settings.html">設定リファレンス</a></li>
+<li><a href="/help/templates.html">JSONの書き方</a></li>
+<li><a href="/help/api.html">APIの使い方</a></li>
+<li><a href="/help/glossary.html">用語集</a></li>
+</ul>
+</article>
+    </main>
+  </div>
+</body>
+</html>

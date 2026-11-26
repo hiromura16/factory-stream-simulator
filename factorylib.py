@@ -1,4 +1,3 @@
-# モジュール読解: アプリの組立て、保存設定、実行履歴、協調停止とAPI境界を担う共通層。
 # アダプターだけが方式固有の生成・送信を行い、例外の秘密情報はこの境界で外へ出さない。
 """Independent source runtime with declarative profiles and presets."""
 
@@ -19,19 +18,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse, Response, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from operation_confirmation import CONFIRMATION_HEADER, install_operation_gate
+from api_support import (
+    display_location, history_error, install_error_handlers, install_help,
+    management_credentials, unauthorized_management,
+)
 from config import ALLOWED_KINDS, ConnectionProfile, RunSpec
+from generation import anomaly_warnings
 from generation import (
     GenerationError,
     batch_limit,
     generate_record,
-    map_json,
-    record_key,
     sample_offsets,
     validate_generation,
 )
@@ -48,9 +50,9 @@ class JobCancelled(Exception):
 
 class JobContext:
     """アダプターへ停止判定・進捗・負荷調整を提供する実行単位の状態。"""
-    # 読解 JobContext.__init__: runtime・run_id・停止イベントを受け取り、一実行の計数と単調時計を初期化する。
     # 出力履歴や異常注入回数は実行間で共有せず、永続化はprogressに任せる。
     def __init__(self, runtime, run_id, stop):
+        """runtime・run_id・停止イベントを受け取り、一実行の計数と単調時計を初期化する。"""
         self.runtime, self.run_id, self.stop = runtime, run_id, stop
         self.stats = {
             "processed": 0,
@@ -85,7 +87,7 @@ class JobContext:
                 if (
                     line.startswith("MemAvailable:")
                     and int(line.split()[1]) * 1024
-                    < float(os.environ.get("MIN_AVAILABLE_GIB", "6")) * 1024**3
+                    < float(os.environ.get("MIN_AVAILABLE_GIB", "1")) * 1024**3
                 ):
                     raise RuntimeError("host_memory_headroom_low")
 
@@ -209,6 +211,7 @@ class Runtime:
         if row is None:
             raise HTTPException(404, "実行が見つかりません")
         value = dict(row)
+        value["error_message"] = history_error(value.get("error"))
         for key in ["spec", "stats", "outputs"]:
             value[key] = json.loads(value[key])
         return value
@@ -282,7 +285,7 @@ class Runtime:
         except JobCancelled:
             status = "stopped"
         except GenerationError as exc:
-            status, error = "failed", str(exc)
+            status, error = "failed", f"generation_error: {display_location(getattr(exc, 'path', ()))}　{exc}"
         except Exception as exc:
             # Exceptions from drivers may contain credentials or connection strings.
             safe_codes = {
@@ -320,15 +323,38 @@ class Runtime:
         return self.get(run_id)
 
 
-# 読解 RetryRequest: 再送APIの入力。接続ID・件数上限・バッチ幅を型と範囲で制限する。
-# モデルdocstringは公開JSON Schemaへ反映されるため、この説明はコメントに置く。
+class CaptureMetadata(BaseModel):
+    """ローカル記録の一覧行。本文は詳細取得まで返さない。"""
+
+    id: int = Field(description="本文の取得に使う記録ID")
+    profile_id: str = Field(description="記録専用だった送信先設定のID")
+    record_key: str = Field(description="イベントの照合キー")
+    topic: str = Field(description="このイベントのトピック")
+    created_at: str = Field(description="保存したUTC日時（ISO 8601）")
+    bytes: int = Field(description="保存された本文のUTF-8バイト数")
+
+
+class CapturePage(BaseModel):
+    """ローカル記録の一覧と、次のページを開くための位置。"""
+
+    events: list[CaptureMetadata]
+    next_before: int | None = Field(
+        description="古い記録を読むときのbefore。最後のページではnull"
+    )
+
+
+class CaptureRecord(CaptureMetadata):
+    """メタ情報に元の本文を添えたローカル記録。"""
+
+    payload: str = Field(description="保存された元の本文。文字列なので、JSONとして扱う場合はデコードします")
+
+
 class RetryRequest(BaseModel):
     connection_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
     limit: int = Field(default=1000, ge=1, le=1000000)
     batch_size: int = Field(default=100, ge=1, le=1000)
 
 
-# 読解 UploadedConnectionFile: 接続補助ファイル名とBase64本文の入力モデル。名前と符号化文字列の長さを制約する。
 # 復号後の実サイズ・ルート内判定はアップロード処理で別途行う。
 class UploadedConnectionFile(BaseModel):
     name: str = Field(
@@ -339,9 +365,9 @@ class UploadedConnectionFile(BaseModel):
     content_base64: str = Field(max_length=1500000)
 
 
-# 読解 bootstrap_profiles: defaultが保存済みなら何も変更しない。未登録時だけ種類と環境設定から初期接続を保存する。
 # 秘密値ファイルを読む分岐があり、単なる表示用関数ではない。実接続はここでは行わない。
 def bootstrap_profiles(kind, store):
+    """defaultが保存済みなら何も変更しない。未登録時だけ種類と環境設定から初期接続を保存する。"""
     try:
         store.get_profile("default")
         return
@@ -413,9 +439,9 @@ def create_app(kind, title, adapter):
     store = ConfigStore(Path(os.environ.get("DATA_DIR", "./data")) / "settings")
     bootstrap_profiles(kind, store)
 
-    # 読解 create_app.initial_preset: 初期SQL Server接続が同梱の検証DBを指す場合だけ、未指定schemaをsyntheticへ補完する。
     # 入力specを変更して返す。保存済みプリセットにはseed_presets側で再適用しない。
     def initial_preset(spec):
+        """初期SQL Server接続が同梱の検証DBを指す場合だけ、未指定schemaをsyntheticへ補完する。"""
         current, _ = store.get_profile("default")
         if (
             kind == "sql"
@@ -428,9 +454,9 @@ def create_app(kind, title, adapter):
 
     store.seed_presets(root / "presets", initial_preset)
 
-    # 読解 create_app.dispatch: 実行時に指定リビジョンの接続を読み、taskに応じて生成か再送のアダプターを呼ぶ。
     # 秘密値は接続オブジェクト内に保持し、処理例外はRuntime側へ伝える。
     def dispatch(spec, ctx):
+        """実行時に指定リビジョンの接続を読み、taskに応じて生成か再送のアダプターを呼ぶ。"""
         profile, _ = store.get_profile(spec.connection_id, spec.connection_revision)
         (adapter.retry if spec.task == "retry" else adapter.handle)(
             spec, ctx, profile, store
@@ -438,39 +464,30 @@ def create_app(kind, title, adapter):
 
     runtime = Runtime(kind, dispatch, 100000000)
 
-    # 読解 create_app.lifespan: アプリ終了時に停止イベントを立て、実行中スレッドを最大20秒待つ。
     # 待機期限後の強制終了やDBロールバックはこの関数では行わない。
     @asynccontextmanager
     async def lifespan(app):
+        """アプリ終了時に停止イベントを立て、実行中スレッドを最大20秒待つ。"""
         yield
         runtime.stop.set()
         if runtime.thread:
             runtime.thread.join(timeout=20)
 
-    app = FastAPI(title=title, version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title=title, version="0.3.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.runtime = runtime
     app.state.config_store = store
     app.state.kind = kind
 
-    # 読解 create_app.validation_error: 入力検証エラーをHTTP 422へ変換し、位置・説明・型だけを返す。
     # 秘密値を含み得るリクエスト本文や入力値をそのまま応答へ転載しない。
-    @app.exception_handler(RequestValidationError)
-    async def validation_error(request, exc):
-        # Never echo request bodies: connection forms contain write-only credentials.
-        return JSONResponse(
-            {
-                "detail": [
-                    {"loc": e["loc"], "msg": e["msg"], "type": e["type"]}
-                    for e in exc.errors()
-                ]
-            },
-            status_code=422,
-        )
-
-    # 読解 create_app.protect: ヘルス以外の要求を検査し、変更要求のOrigin・JSON形式・宣言サイズを拒否条件と照合する。
     # 正常応答にはブラウザー向け安全ヘッダーを付ける。本文の全受信サイズを測る処理ではない。
+    credentials = management_credentials()
+    install_error_handlers(app)
+
     @app.middleware("http")
     async def protect(request: Request, call_next):
+        denied = unauthorized_management(request, credentials, False)
+        if denied is not None:
+            return denied
         if request.url.path == "/healthz":
             return await call_next(request)
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -506,20 +523,25 @@ def create_app(kind, title, adapter):
         return response
 
     app.mount("/static", StaticFiles(directory=root / "static"), name="static")
+    install_help(app, root, False, kind, credentials)
+    gate = install_operation_gate(app, kind, store, RunSpec, RetryRequest)
 
-    # 読解 create_app.index: 同梱のstatic/index.htmlをFileResponseで返す。設定を生成したりジョブを開始したりしない。
-    @app.get("/")
+    @app.get("/", include_in_schema=False)
     def index():
         return FileResponse(root / "static/index.html")
 
-    # 読解 create_app.health: サービス種別と版を返す軽量ヘルス応答。外部接続や下流の健全性は検査しない。
-    @app.get("/healthz")
+    @app.get(
+        "/healthz",
+        summary='動作確認',
+        tags=['動作確認・監視'],
+    )
     def health():
-        return {"status": "ok", "service": kind, "version": "0.2.0"}
+        """アプリがHTTPに応答することを示します。接続先や下流の処理結果は別に確認します。"""
+        return {"status": "ok", "service": kind, "version": "0.3.0"}
 
-    # 読解 create_app.profile: IDと任意リビジョンで接続を読み、現在のツールが許可する方式か検査して版と共に返す。
     # 未登録は404、方式不一致は422に変換し、呼出先へ無検査の接続を渡さない。
     def profile(identity, revision=None):
+        """IDと任意リビジョンで接続を読み、現在のツールが許可する方式か検査して版と共に返す。"""
         try:
             value, version = store.get_profile(identity, revision)
         except KeyError:
@@ -542,9 +564,9 @@ def create_app(kind, title, adapter):
             raise HTTPException(409, "接続先が変更されました。再確認してください")
         return selected, current
 
-    # 読解 create_app.checked: 生成条件を代表位置で検証し、ツール違いの再送・ファイル破損指定を拒否する。
     # 利用者向け生成例外以外の型エラー詳細は一般化して422を返す。全行保証ではない。
     def checked(spec):
+        """生成条件を代表位置で検証し、ツール違いの再送・ファイル破損指定を拒否する。"""
         if kind != "stream" and spec.task != "generate":
             raise HTTPException(422, "再送はストリームツールだけで使用できます")
         if (
@@ -554,35 +576,39 @@ def create_app(kind, title, adapter):
         ):
             raise HTTPException(422, "不正ファイルの生成設定はファイルツール専用です")
         try:
-            validate_generation(spec)
-        except (ValueError, TypeError, OverflowError) as exc:
+            validate_generation(spec, kind=kind)
+        except GenerationError:
+            raise
+        except (ValueError, TypeError, OverflowError):
             raise HTTPException(
                 422,
-                str(exc)
-                if isinstance(exc, GenerationError)
-                else "生成ルールの型・範囲・日時を確認してください",
+                "生成ルールの型・範囲・日時を確認してください",
             ) from None
         return spec
 
-    # 読解 create_app.safe_call: 指定処理を呼び、HTTP例外は維持し、生成検証は422・接続処理失敗は503へ変換する。
     # ドライバー由来の本文には秘密値が含まれ得るので、型名だけを外部へ返す。
     def safe_call(callback, *args):
+        """指定処理を呼び、HTTP例外は維持し、生成検証は422・接続処理失敗は503へ変換する。"""
         try:
             return callback(*args)
         except HTTPException:
             raise
-        except GenerationError as exc:
-            raise HTTPException(422, str(exc)) from None
+        except GenerationError:
+            raise
         except Exception as exc:
             raise HTTPException(
                 503,
                 f"接続先の処理に失敗しました ({type(exc).__name__})。接続情報・権限・対象の構造を確認してください。",
             ) from None
 
-    # 読解 create_app.information: 画面に必要な既定RunSpec、利用可能接続方式とヘルプを返す。
     # 保存済みdefault接続を参照するが、秘密値そのものは応答へ含めない。
-    @app.get("/api/info")
+    @app.get(
+        "/api/info",
+        summary='アプリ情報・既定値',
+        tags=['動作確認・監視'],
+    )
     def information():
+        """このアプリに適用される設定、既定値、接続先の案内を返します。秘密情報は含みません。"""
         from helptext import CONNECTION_HELP
 
         default = RunSpec()
@@ -596,7 +622,7 @@ def create_app(kind, title, adapter):
         return {
             "kind": kind,
             "title": title,
-            "version": "0.2.0",
+            "version": "0.3.0",
             "contract_version": CONTRACT_VERSION,
             "max_rows": 100000000,
             "defaults": default.model_dump(mode="json"),
@@ -610,17 +636,21 @@ def create_app(kind, title, adapter):
             },
         }
 
-    # 読解 create_app.schemas: 現在のツール向けに注釈した生成・接続JSON Schemaを返す。
     # HELPの登録漏れを隠して空説明へ置換せず、モデルとの整合性を維持する。
-    @app.get("/api/schemas")
+    @app.get(
+        "/api/schemas",
+        summary='設定スキーマを取得',
+        tags=['設定・ひな型'],
+    )
     def schemas():
+        """実行ひな型と接続設定のJSON Schemaを返します。項目の型や候補、エディター補完に利用できます。"""
         from helptext import annotated_schemas
 
         return annotated_schemas(kind)
 
-    # 読解 create_app.files_root: 接続補助ファイルの保存ディレクトリを設定から正規化し、必要なら作成して返す。
     # 対象はstore配下の既定領域か明示設定であり、成果物のlandingとは別管理する。
     def files_root():
+        """接続補助ファイルの保存ディレクトリを設定から正規化し、必要なら作成して返す。"""
         path = Path(
             os.environ.get(
                 "CONNECTION_FILES_DIR", str(store.root.parent / "connection-files")
@@ -629,10 +659,14 @@ def create_app(kind, title, adapter):
         path.mkdir(parents=True, exist_ok=True, mode=0o700)
         return path
 
-    # 読解 create_app.connection_files: 補助ファイルの相対名とサイズを最大200件返す。
     # シンボリックリンクと本文は返さず、秘密値を含み得るファイル内容を露出しない。
-    @app.get("/api/connection-files")
+    @app.get(
+        "/api/connection-files",
+        summary='接続補助ファイルの一覧',
+        tags=['接続・公開設定'],
+    )
     def connection_files():
+        """保存したファイルの相対名と大きさを返します。本文は返しません。"""
         root = files_root()
         return {
             "files": [
@@ -642,10 +676,14 @@ def create_app(kind, title, adapter):
             ][:200]
         }
 
-    # 読解 create_app.upload_connection_file: 名前とBase64を検査し、1MiB以内の内容を専用ルートへ権限600で保存する。
     # 一時名を排他的に作り同期後に置換する。既存同名ファイルの更新は許される。
-    @app.post("/api/connection-files")
+    @app.post(
+        "/api/connection-files",
+        summary='接続補助ファイルを配置',
+        tags=['接続・公開設定'],
+    )
     def upload_connection_file(value: UploadedConnectionFile):
+        """相対名とBase64を含むJSONを受け付けます。デコード後1MiBまで。同名は置き換え、ファイルは権限600で保存します。"""
         root = files_root()
         target = (root / value.name).resolve()
         if not target.is_relative_to(root) or any(
@@ -671,70 +709,103 @@ def create_app(kind, title, adapter):
             temp.unlink(missing_ok=True)
         return {"name": value.name, "bytes": len(content), "permissions": "600"}
 
-    # 読解 create_app.connections: 保存済み接続の公開用一覧から、現在のツールで利用できる方式だけを返す。
     # 秘密値の除外はstore.profilesの表示用変換で行う。
-    @app.get("/api/connections")
+    @app.get(
+        "/api/connections",
+        summary='接続先一覧',
+        tags=['接続・公開設定'],
+    )
     def connections():
+        """利用できる接続先と版を返します。資格情報は値を返さず設定済みとして区別します。"""
         return {
             "connections": [
                 p for p in store.profiles() if p["kind"] in ALLOWED_KINDS[kind]
             ]
         }
 
-    # 読解 create_app.save_connection: ツールが扱える方式かを検査して接続を保存し、秘密値を除いた結果を返す。
     # 認証情報の継承・削除・リビジョン追加はConfigStoreに集約する。
-    @app.post("/api/connections")
+    @app.post(
+        "/api/connections",
+        summary='接続先を保存',
+        tags=['接続・公開設定'],
+    )
     def save_connection(value: ConnectionProfile):
+        """指定したIDで接続情報を保存します。既存の秘密値は同じ認証設定でのみ引き継ぎます。"""
         if value.kind not in ALLOWED_KINDS[kind]:
             raise HTTPException(422, "このツールでは使用できない接続方式です")
         return store.save_profile(value)
 
-    # 読解 create_app.export_connection: 指定接続の公開用データから設定済み秘密値のメタ情報も除いて返す。
     # 秘密値やヘッダー値をエクスポートする経路にはしない。
-    @app.get("/api/connections/{identity}/export")
+    @app.get(
+        "/api/connections/{identity}/export",
+        summary='接続先を書き出す',
+        tags=['接続・公開設定'],
+    )
     def export_connection(identity: str):
+        """パスワードやトークン、認証ヘッダーを除外して指定IDの接続設定を返します。"""
         value, revision = profile(identity)
         result = store.public(value)
         for key in ["configured_secrets", "configured_headers"]:
             result.pop(key, None)
         return result
 
-    # 読解 create_app.test_connection: 保存済み接続を解決し、アダプターの疎通試験を安全な例外変換付きで呼ぶ。
     # 実接続を伴い得るため、プレビューとは異なる操作である。
-    @app.post("/api/connections/{identity}/test")
+    @app.post(
+        "/api/connections/{identity}/test",
+        summary='接続先を試験',
+        tags=['接続・公開設定'],
+    )
     def test_connection(identity: str):
+        """保存済みIDで接続先へアクセスします。接続先の種類に応じて疎通と利用可能な情報を返します。"""
         value, _ = profile(identity)
         return safe_call(adapter.test_connection, value)
 
-    # 読解 create_app.presets: 保存済みプリセットの一覧を返す。実行は開始せず、履歴との結合も行わない。
-    @app.get("/api/presets")
+    @app.get(
+        "/api/presets",
+        summary='ひな型一覧',
+        tags=['設定・ひな型'],
+    )
     def presets():
+        """同梱・保存済みのひな型と内容を返します。読み取りで生成や実行は始まりません。"""
         return {"presets": store.presets()}
 
-    # 読解 create_app.save_preset: IDの許可文字と生成条件を検証して保存する。既存IDは更新対象となる。
     # 生成条件の検証は接続先に書き込む試験を意味しない。
-    @app.post("/api/presets/{identity}")
+    @app.post(
+        "/api/presets/{identity}",
+        summary='ひな型を保存',
+        tags=['設定・ひな型'],
+    )
     def save_preset(identity: str, spec: RunSpec):
+        """IDは英数字・下線・ハイフンで64文字以内です。JSONを検証し、同じIDならひな型を更新します。"""
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", identity):
             raise HTTPException(
                 422, "プリセットIDは英数字・ハイフン・下線で指定してください"
             )
         return store.save_preset(identity, checked(spec))
 
-    # 読解 create_app.export_preset: 指定IDのspecだけを返す。未登録IDは安全な404に変換する。
-    @app.get("/api/presets/{identity}/export")
+    @app.get(
+        "/api/presets/{identity}/export",
+        summary='指定ひな型を書き出す',
+        tags=['設定・ひな型'],
+        responses={404: {'description': '指定したひな型が見つかりません'}},
+    )
     def export_preset(identity: str):
+        """保存されたIDの設定JSONを返します。未登録のIDは404です。"""
         try:
             return store.get_preset(identity)["spec"]
         except KeyError:
             raise HTTPException(404, "プリセットが見つかりません") from None
 
-    # 読解 create_app.preview: 先頭と異常境界を含む最大12位置を生成し、本文・異常hit・推定値を返す。
     # 接続・書込み・送信は行わない。表示サンプルの成功を全行や下流成功と扱わない。
-    @app.post("/api/preview")
+    @app.post(
+        "/api/preview",
+        summary='実行前に生成の見本を見る',
+        tags=['設定・ひな型'],
+    )
     def preview(spec: RunSpec, expected_revision: int | None = Header(
             default=None, alias="X-Expected-Connection-Revision", ge=1
         )):
+        """入力を検証し、先頭や異常条件の境界で合成した値を records に返します。writes は false です。実行先へ出力しません。"""
         checked(spec)
         offsets = sorted(set(list(range(min(3, spec.rows))) + sample_offsets(spec)))[
             :12
@@ -759,11 +830,6 @@ def create_app(kind, title, adapter):
                 if exc.status_code != 404:
                     raise
         for i, row in enumerate(records):
-            meta = {
-                "record_key": record_key(spec, spec.start_sequence + offsets[i]),
-                "sequence": spec.start_sequence + offsets[i],
-                "run_key": spec.run_key,
-            }
             try:
                 if kind == "stream":
                     if target:
@@ -783,14 +849,16 @@ def create_app(kind, title, adapter):
                         "duplicate": len(items) > 1,
                     })
                 else:
-                    payload = map_json(spec.files.json_template, row, spec.parameters, meta)
-            except GenerationError as exc:
-                raise HTTPException(422, str(exc)) from None
+                    payload = row
+            except GenerationError:
+                raise
             payloads.append(payload)
         return {
             "sample_sequences": [spec.start_sequence + i for i in offsets],
             "anomaly_hits": anomaly_hits,
+            "warnings": anomaly_warnings(spec),
             "validated_spec": spec.model_dump(mode="json"),
+            "compact_spec": {"version": spec.version, **spec.model_dump(mode="json", exclude_defaults=True)},
             "writes": False,
             "records": records,
             "json_payloads": payloads,
@@ -800,7 +868,7 @@ def create_app(kind, title, adapter):
                 else {}
             ),
             "rows": spec.rows,
-            "effective_batch_limit": batch_limit(spec, spec.batch_size),
+            "effective_batch_limit": batch_limit(spec, spec.batch_size, kind=kind),
             "estimated_seconds": round(
                 spec.rows * (1 + spec.stream.duplicate_rate if kind == "stream" else 1)
                 / spec.target_rate,
@@ -811,48 +879,77 @@ def create_app(kind, title, adapter):
             "note": "プレビューでは接続・書き込み・送信しません。正常位置と異常条件の開始位置を含むサンプルを表示します。目標速度は性能保証ではありません。",
         }
 
-    # 読解 create_app.start: 条件と接続を確認し、その時点のリビジョンへ固定して非同期実行を開始する。
     # HTTP 202は受付であり、生成や配送の完了を意味しない。
-    @app.post("/api/runs", status_code=202)
-    def start(spec: RunSpec, expected_revision: int | None = Header(
+    @app.post(
+        "/api/runs", status_code=202,
+        summary='新しい実行を受け付ける',
+        tags=['実行・出力'],
+        responses={409: {'description': '実行枠または接続設定を確認してください'}},
+    )
+    def start(request: Request, spec: RunSpec, expected_revision: int | None = Header(
             default=None, alias="X-Expected-Connection-Revision", ge=1
         )):
+        """現在の接続先の版でバックグラウンド実行を作ります。202は受付です。応答の id を run_id に指定して履歴を確認します。"""
         checked(spec)
         if kind == "stream":
             selected, revision = resolve_stream_destination(spec, expected_revision)
             safe_call(check_stream_profile, spec, selected.kind)
         else:
             _, revision = profile(spec.connection_id, spec.connection_revision)
+        operation = gate.assess("/api/runs", spec, revision)
+        gate.require(operation, request.headers.get(CONFIRMATION_HEADER))
         return runtime.start(spec.model_copy(update={"connection_revision": revision}))
 
-    # 読解 create_app.runs: 実行履歴の一覧を返す。稼働状態の取得だけで新しいジョブを作らない。
-    @app.get("/api/runs")
+    @app.get(
+        "/api/runs",
+        summary='実行履歴の一覧',
+        tags=['実行・出力'],
+    )
     def runs():
+        """稼働中も含めた履歴を返します。この要求から新規ジョブは作りません。"""
         return {"runs": runtime.list()}
 
-    # 読解 create_app.run: 指定run_idの保存済み状態を返す。存在しない場合の404はRuntimeが担う。
-    @app.get("/api/runs/{run_id}")
+    @app.get(
+        "/api/runs/{run_id}",
+        summary='実行結果を取得',
+        tags=['実行・出力'],
+        responses={404: {'description': '指定した実行が見つかりません'}},
+    )
     def run(run_id: str):
+        """指定したジョブの状態、件数、出力を取得します。指定のIDが存在しない場合は404です。"""
         return runtime.get(run_id)
 
-    # 読解 create_app.stop: 指定run_idへ協調停止を要求して現在状態を返す。即時停止・巻戻しは保証しない。
-    @app.post("/api/runs/{run_id}/stop")
+    @app.post(
+        "/api/runs/{run_id}/stop",
+        summary='実行の停止を要求',
+        tags=['実行・出力'],
+        responses={404: {'description': '指定した実行が見つかりません'}},
+    )
     def stop(run_id: str):
+        """実行は停止可能な境界で終了します。確定済みのバッチや部分出力が残る場合があります。"""
         return runtime.cancel(run_id)
 
-    # 読解 create_app.source: streamではoutbox集計、他方式ではdefault接続の疎通結果を返す。
     # 後者は外部I/Oを伴い得るため、単なる保存設定一覧とは区別する。
-    @app.get("/api/source")
+    @app.get(
+        "/api/source",
+        summary='出力側の状態を調べる',
+        tags=['実行・出力'],
+    )
     def source():
+        """ストリームは配送集計、SQLとファイルは既定接続の疎通結果を返します。疎通確認は接続先へアクセスします。"""
         if kind == "stream":
             return adapter.summary()
         value, _ = profile("default")
         return safe_call(adapter.test_connection, value)
 
-    # 読解 create_app.metrics: 履歴DBを状態別に集計し、Prometheusテキストのジョブ件数を返す。
     # 秘密値やジョブ本文はメトリクスへ含めない。
-    @app.get("/metrics", response_class=PlainTextResponse)
+    @app.get(
+        "/metrics", response_class=PlainTextResponse,
+        summary='Prometheus向けメトリクス',
+        tags=['動作確認・監視'],
+    )
     def metrics():
+        """生成や実行状態のカウンターをPrometheus向けテキストで返します。"""
         with runtime.connect() as conn:
             rows = conn.execute(
                 "SELECT status,count(*) FROM jobs GROUP BY status"
@@ -863,46 +960,138 @@ def create_app(kind, title, adapter):
 
     if kind == "sql":
 
-        # 読解 create_app.prepare: SQL用入力を検証して表準備を依頼する。対象がない場合はDDLを実行し得る操作。
         # 接続プロファイルを解決し、失敗の詳細はsafe_callで一般化する。
-        @app.post("/api/table/prepare")
+        @app.post(
+            "/api/table/prepare",
+            summary='未作成テーブルを作る',
+            tags=['実行・出力'],
+        )
         def prepare(spec: RunSpec):
+            """指定先にテーブルが存在しない場合にDDLを実行します。書き込むDB・スキーマ・テーブルを確認して指定します。"""
             checked(spec)
             value, _ = profile(spec.connection_id, spec.connection_revision)
             return safe_call(adapter.prepare_table, value, spec)
 
-        # 読解 create_app.inspect_table: SQL接続を解決して既存表の構造を取得する。表作成は要求しない。
-        @app.post("/api/table/inspect")
+        @app.post(
+            "/api/table/inspect",
+            summary='既存テーブルの列を取得',
+            tags=['実行・出力'],
+        )
         def inspect_table(spec: RunSpec):
+            """接続先のテーブルから列や主キーを調べます。テーブルの作成や行の書き込みは行いません。"""
             value, _ = profile(spec.connection_id, spec.connection_revision)
             return safe_call(adapter.inspect_table, value, spec)
 
-        # 読解 create_app.ddl: 接続方式に合うDDL文字列をアダプターから取得する。DDL適用は要求しない。
-        @app.post("/api/table/ddl")
+        @app.post(
+            "/api/table/ddl",
+            summary='テーブル作成SQLを表示',
+            tags=['実行・出力'],
+        )
         def ddl(spec: RunSpec):
+            """対象接続のSQL方言に合うCREATE TABLE文を返します。DDLの適用はテーブル作成操作で行います。"""
             value, _ = profile(spec.connection_id, spec.connection_revision)
             return safe_call(adapter.ddl, value, spec)
 
     if kind == "files":
 
-        # 読解 create_app.image: 保存済み実行を取得し、画像応答をアダプターへ依頼する。
         # リモート成果物の読出しを伴い得るが、再生成はしない。
-        @app.get("/api/runs/{run_id}/image")
+        @app.get(
+            "/api/runs/{run_id}/image",
+            summary='生成済み画像を取得',
+            tags=['実行・出力'],
+            response_class=Response,
+            responses={200: {'description': '生成済み画像を取得', 'content': {'image/png': {'schema': {'type': 'string', 'format': 'binary'}}, 'image/jpeg': {'schema': {'type': 'string', 'format': 'binary'}}}}, 404: {'description': '指定した画像が見つかりません'}},
+        )
         def image(run_id: str):
+            """保存済みの成果物を読みます。保存方式に応じてPNGまたはJPEGを返します。新規生成はしません。"""
             return safe_call(adapter.artifact, runtime.get(run_id), store)
 
     if kind == "stream":
 
-        # 読解 create_app.outbox: streamの送信待ち・配送済み集計を返す。配送操作とは分離する。
-        @app.get("/api/outbox")
+        @app.get(
+            "/api/outbox/capture",
+            tags=["ローカル記録"],
+            summary="ローカル記録の一覧",
+            response_model=CapturePage,
+        )
+        def captured_events(
+            limit: int = Query(default=25, ge=1, le=100, description="表示する上限件数"),
+            before: int | None = Query(default=None, ge=1, le=2**63 - 1, description="前の応答の next_before"),
+        ):
+            """ローカル記録のID・時刻・トピック・サイズを新しい順に返す。"""
+            rows = list(adapter.capture_rows(store, limit + 1, before=before))
+            return {
+                "events": rows[:limit],
+                "next_before": rows[limit - 1]["id"] if len(rows) > limit else None,
+            }
+
+        @app.get(
+            "/api/outbox/capture/download",
+            tags=["ローカル記録"],
+            summary="ローカル記録をJSONLでダウンロード",
+            response_class=StreamingResponse,
+            responses={200: {"content": {"application/x-ndjson": {"schema": {"type": "string"}}}}},
+        )
+        def download_captured_events(
+            limit: int = Query(default=25, ge=1, le=100, description="出力する上限件数"),
+            before: int | None = Query(default=None, ge=1, le=2**63 - 1, description="前の一覧応答の next_before"),
+        ):
+            """1行1イベントで書き出す。payloadには保存した本文を文字列で含める。"""
+            rows = adapter.capture_rows(store, limit, before=before, include_payload=True)
+            # Fetch once before sending headers so storage errors can still return an HTTP error.
+            first = next(rows, None)
+
+            def json_lines():
+                try:
+                    if first is not None:
+                        yield json.dumps(first, ensure_ascii=False) + "\n"
+                    for row in rows:
+                        yield json.dumps(row, ensure_ascii=False) + "\n"
+                finally:
+                    rows.close()
+
+            return StreamingResponse(
+                json_lines(),
+                media_type="application/x-ndjson",
+                headers={"Content-Disposition": 'attachment; filename="stream-capture.jsonl"'},
+            )
+
+        @app.get(
+            "/api/outbox/capture/{row_id}",
+            tags=["ローカル記録"],
+            summary="ローカル記録の本文",
+            response_model=CaptureRecord,
+            responses={404: {"description": "ローカル記録が見つからない"}},
+        )
+        def captured_event(row_id: int):
+            """指定したローカル記録1件に元の本文を添えて返す。"""
+            if not 1 <= row_id <= 2**63 - 1:
+                raise HTTPException(422, "記録IDを確認してください")
+            rows = list(adapter.capture_rows(store, 1, row_id=row_id, include_payload=True))
+            if not rows:
+                raise HTTPException(404, "ローカル記録が見つかりません")
+            return rows[0]
+
+        @app.get(
+            "/api/outbox",
+            summary='配送の集計を取得',
+            tags=['実行・出力'],
+        )
         def outbox():
+            """送信待ち・配送済みなどの件数を返します。配送や再送は開始しません。"""
             return adapter.summary()
 
-        # 読解 create_app.retry: 現在の接続版と上限から再送専用RunSpecを作り、通常の実行枠で開始する。
         # 未配送データの抽出と宛先一致確認はアダプター側で行う。
-        @app.post("/api/outbox/retry", status_code=202)
-        def retry(value: RetryRequest):
+        @app.post(
+            "/api/outbox/retry", status_code=202,
+            summary='未配送イベントの再送を受け付ける',
+            tags=['実行・出力'],
+        )
+        def retry(request: Request, value: RetryRequest):
+            """対象の接続と版を照合し、指定上限の再送ジョブを作ります。202の後に実行結果を確認します。"""
             _, revision = profile(value.connection_id)
+            operation = gate.assess("/api/outbox/retry", value, revision)
+            gate.require(operation, request.headers.get(CONFIRMATION_HEADER))
             spec = RunSpec(
                 name="未配送データの再送",
                 connection_id=value.connection_id,

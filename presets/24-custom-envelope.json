@@ -210,6 +210,7 @@
     "operation": "upsert"
   },
   "files": {
+    "completion_mode": "manifest-v2",
     "formats": [
       "json",
       "csv",
@@ -231,6 +232,17 @@
     "csv_encoding": "utf-8-sig",
     "write_sidecars": true,
     "write_manifest": true,
+    "xlsx_sheet": "Data",
+    "xlsx_allow_formulas": false,
+    "xml_root": "records",
+    "xml_row": "record",
+    "parquet_compression": "snappy",
+    "avro_record_name": "SourceRecord",
+    "avro_namespace": "factory.source",
+    "avro_codec": "deflate",
+    "pdf_landscape": true,
+    "pdf_font_size": 8,
+    "pdf_columns": [],
     "image": {
       "width": 320,
       "height": 240,
@@ -257,6 +269,8 @@
         "state": "$row.status"
       }
     },
+    "message_size_bytes": 0,
+    "duplicate_rate": 0.0,
     "delivery_attempts": null,
     "retry_backoff_ms": null
   },

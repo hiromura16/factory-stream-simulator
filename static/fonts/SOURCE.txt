@@ -1,3 +1,4 @@
-Zen Kaku Gothic New, Regular and Bold
-https://github.com/google/fonts/tree/ba225958c40ae6268a256861d80355a84b26e535/ofl/zenkakugothicnew
-WOFF2 subsets for the Japanese interface and the example data bundled with the apps.
+Noto Sans JP by Google Fonts / Adobe, upstream source:
+https://github.com/google/fonts/tree/295d98a7a0c17c68f1341eaeea354e7960ea70d3/ofl/notosansjp
+Converted from the upstream variable TTF to WOFF2. The UI asset is subset to the character set used by the applications.
+SIL Open Font License 1.1, see OFL.txt.

@@ -1,17 +1,67 @@
 name: Validate
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
-          version: "0.12.7"
-          python-version: "3.12"
-      - run: uv sync --frozen
-      - run: uv run pytest -q
-      - run: python -m compileall -q app.py factorylib.py producer.py scripts
+          version: "0.13.7"
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked --python "${{ matrix.python }}"
+      - run: uv run --frozen python --version
+      - run: uv run --frozen pytest -q
+      - run: uv run --frozen python -m compileall -q app.py factorylib.py producer.py scripts
       - run: node --check static/app.js
-      - run: node --test tests/job_history.test.cjs
-      - run: docker build -t factory-source:test .
+      - run: node --test tests/*.test.cjs
+      - if: matrix.python == '3.14'
+        run: |
+          uv run --frozen --with markdown-it-py==4.0.0 python scripts/build_help.py --check
+          uv run --frozen python scripts/check_shared.py
+      - if: matrix.python == '3.12'
+        run: docker build -t factory-source:test .
+      - name: Smoke-test the built container
+        if: matrix.python == '3.12'
+        run: |
+          docker run --detach --name factory-smoke --env AUTO_START=1 factory-source:test
+          trap 'docker rm --force factory-smoke >/dev/null' EXIT
+          if ! docker exec -i factory-smoke python - <<'PY'
+          import json
+          import time
+          from urllib.error import URLError
+          from urllib.request import urlopen
+
+          def read(path):
+              with urlopen("http://127.0.0.1:8080" + path, timeout=2) as response:
+                  return response.read()
+
+          deadline = time.monotonic() + 30
+          while True:
+              try:
+                  read("/healthz")
+                  break
+              except (URLError, TimeoutError):
+                  if time.monotonic() >= deadline:
+                      raise
+                  time.sleep(0.25)
+
+          paths = json.loads(read("/openapi.json"))["paths"]
+          assert "/api/operations/plan" in paths
+          assert read("/help/mcp.html")
+          if "/api/state" in paths:
+              state = json.loads(read("/api/state"))
+              assert state["status"] == "stopped" and state["produced"] == 0, state
+          else:
+              assert json.loads(read("/api/runs"))["runs"] == []
+          PY
+          then
+            docker logs factory-smoke
+            exit 1
+          fi

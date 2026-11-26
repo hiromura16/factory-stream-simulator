@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>APIの使い方 | ストリーム送信</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/help.css">
+  <script src="/static/help.js" defer></script>
+</head>
+<body class="help-page">
+  <a class="help-skip" href="#help-content">本文へ移動</a>
+  <div class="help-top">
+    <a class="help-home" href="/">ストリーム送信</a>
+    <a href="/">アプリに戻る</a>
+  </div>
+  <div class="help-layout">
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html" aria-current="page">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/mcp.html">CLI・MCP</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
+    <main class="help-content" id="help-content">
+      <nav class="help-outline" aria-label="このページ"><a href="#最初のリクエスト">最初のリクエスト</a><a href="#操作を選ぶ">操作を選ぶ</a><a href="#このアプリで取得できる結果">このアプリで取得できる結果</a><a href="#認証とpost">認証とPOST</a><a href="#実行前に接続先と操作を確認する">実行前に接続先と操作を確認する</a><a href="#エラ-の見方">エラーの見方</a></nav>
+      <article><h1>ストリーム送信のAPI</h1>
+<p><a href="/docs">Swagger UI</a>で操作ごとのリクエストと応答を確認できます。<a href="/openapi.json">OpenAPI JSON</a>はAPIクライアントへの読み込み、<a href="/redoc">ReDoc</a>はモデル参照に使えます。</p>
+<h2 id="最初のリクエスト">最初のリクエスト</h2>
+<p>VM内でアプリに向けて実行します。別のURLで開いている場合は同じHTTPアドレスに読み替えます。</p>
+<pre><code class="language-sh">base='http://127.0.0.1:3562'
+curl -fsS &quot;$base/healthz&quot;
+curl -fsS &quot;$base/api/info&quot;
+curl -fsS &quot;$base/api/preview&quot; \
+  -H 'Content-Type: application/json' \
+  --data-binary @docs/examples/stream-beginner.json
+</code></pre>
+<p>アプリの応答、種類と設定情報、合成データの一部を確認できます。<code>records</code> に見本があります。</p>
+<h2 id="操作を選ぶ">操作を選ぶ</h2>
+<table>
+<thead>
+<tr>
+<th>目的</th>
+<th>メソッドとパス</th>
+<th>結果や注意点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>アプリの応答確認</td>
+<td>GET /healthz</td>
+<td>接続先とは別にアプリの応答を調べます。</td>
+</tr>
+<tr>
+<td>設定スキーマを取得</td>
+<td>GET /api/info、GET /api/schemas</td>
+<td>設定の型や既定値の確認に使います。</td>
+</tr>
+<tr>
+<td>生成値の確認</td>
+<td>POST /api/preview</td>
+<td>データの一部を作り、外部には書き込みません。</td>
+</tr>
+<tr>
+<td>接続設定を一覧・保存・確認</td>
+<td>GET／POST /api/connections、POST /api/connections/{identity}/test</td>
+<td>疎通確認は接続先へアクセスします。</td>
+</tr>
+<tr>
+<td>ひな型を一覧・保存・取得</td>
+<td>GET /api/presets、POST /api/presets/{identity}、GET /api/presets/{identity}/export</td>
+<td>同じIDに保存すると更新します。</td>
+</tr>
+<tr>
+<td>実行を受け付ける</td>
+<td>POST /api/runs</td>
+<td>202は受付です。応答の id を控え、run_id に指定します。</td>
+</tr>
+<tr>
+<td>状態を調べる</td>
+<td>GET /api/runs/{run_id}</td>
+<td>完了、失敗、停止を履歴で判断します。</td>
+</tr>
+<tr>
+<td>停止を要求する</td>
+<td>POST /api/runs/{run_id}/stop</td>
+<td>確定済みの出力が残る場合があります。</td>
+</tr>
+</tbody>
+</table>
+<h2 id="このアプリで取得できる結果">このアプリで取得できる結果</h2>
+<p><code>GET /api/outbox</code> で配送状態を読み、<code>POST /api/outbox/retry</code> で再送ジョブを作ります。<code>X-Expected-Connection-Revision</code> は開始時に接続先が変更されていないことを照合するためのヘッダーです。HTTP・MQTTなどへの実際の配送と後段処理を区別します。ローカル記録は <code>GET /api/outbox/capture</code> で新しい順にページを取得し、詳細APIで本文、<code>GET /api/outbox/capture/download</code> で1ページ分のJSON Linesを取得できます。</p>
+<h2 id="認証とpost">認証とPOST</h2>
+<p>管理画面の認証を設定した環境では、管理APIにも同じ認証が必要です。接続先の資格情報は環境側で管理します。</p>
+<p>POSTには <code>Content-Type: application/json</code> を付けます。入力のない停止操作をcurlで呼ぶ場合は <code>--data '{}'</code> を付けます。ブラウザーからの変更操作は同一オリジンで実行します。</p>
+<h2 id="実行前に接続先と操作を確認する">実行前に接続先と操作を確認する</h2>
+<p>外部の宛先への書き込み・送信、公開の開始、SQLのテーブル作成や行の変更には実行前の確認が必要です。プレビューと計画は生成・送信・書き込みを開始しません。</p>
+<ol>
+<li>実行パス（例 <code>/api/runs</code>、<code>/api/table/prepare</code>、<code>/api/start</code>）と送信するJSONを <code>{&quot;path&quot;:&quot;…&quot;,&quot;payload&quot;:{…}}</code> の形で <code>POST /api/operations/plan</code> に渡します。</li>
+<li>応答の <code>summary</code> にある操作、出力先、版、テーブル・件数を確認します。ログの開始URLに <code>profile_revision</code> を使う場合は、計画のJSONにも同じ値を指定します。</li>
+<li><code>confirmation_required</code> が <code>true</code> のときは、同じ設定と <code>X-Operation-Confirmation</code> ヘッダーで実行します。トークンは短時間で失効し、1回だけ使用できます。設定または接続先の版が変わると再確認が必要です。</li>
+</ol>
+<p>428は確認が必要な応答です。CLIは <code>plan</code> コマンドで確認用ファイルを作成できます。</p>
+<h2 id="エラ-の見方">エラーの見方</h2>
+<table>
+<thead>
+<tr>
+<th>HTTP</th>
+<th>確認すること</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>422</td>
+<td><code>detail</code> の場所と説明を読み、JSONのキー・型・値を直します。</td>
+</tr>
+<tr>
+<td>403 / 413 / 415</td>
+<td>操作元、リクエストサイズ、Content-Typeを確認します。</td>
+</tr>
+<tr>
+<td>409</td>
+<td>実行中、接続の変更、データの競合を操作の説明と照合します。</td>
+</tr>
+<tr>
+<td>500</td>
+<td>サーバー側の予期しないエラーです。再実行前に対象と履歴を確認します。</td>
+</tr>
+</tbody>
+</table>
+<p><a href="/help/settings.html">設定リファレンス</a> · <a href="/help/templates.html">JSONの書き方</a></p>
+<p><a href="/help/mcp.html">CLI・MCPの使い方</a></p>
+<p>確認プランと実行には同じ管理APIの権限が必要です。トークンは送信内容と接続先の取り違えを防ぎます。管理権限を持つクライアントは計画と実行の両方を呼べるため、承認者を分ける運用では管理資格情報の配布も制限してください。MCPは既定で見本・検証・参照だけを公開します。</p>
+</article>
+    </main>
+  </div>
+</body>
+</html>

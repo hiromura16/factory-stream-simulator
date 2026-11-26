@@ -91,6 +91,7 @@ function fixture() {
   const context = vm.createContext({
     document, window: { addEventListener() {} }, performance: { now: () => now },
   });
+  vm.runInContext(readFileSync(join(__dirname, "../static/api-client.js"), "utf8"), context);
   vm.runInContext(source.slice(0, entry), context);
   const pending = [];
   context.fetch = async (path) => {

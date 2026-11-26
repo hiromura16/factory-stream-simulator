@@ -1,0 +1,33 @@
+.capture-history {
+  overflow-wrap: anywhere;
+}
+
+.capture-history .toolbar {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.capture-history ol {
+  display: grid;
+  gap: .65rem;
+  list-style: none;
+  padding: 0;
+}
+
+.capture-history li {
+  background: var(--panel, #111a29);
+  border: 1px solid var(--line, #344762);
+  border-radius: .7rem;
+  display: grid;
+  padding: .8rem;
+  gap: .35rem;
+}
+
+.capture-history small {
+  color: var(--muted, #afbdd1);
+}
+
+.capture-history pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

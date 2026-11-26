@@ -1,0 +1,5 @@
+ReDoc 3.2.0
+https://github.com/Redocly/redoc
+Copied from the npm package redoc@3.2.0.
+The two upstream attribution images are served alongside the bundle for offline use.
+Only their two CDN URLs were replaced with module-relative URLs.

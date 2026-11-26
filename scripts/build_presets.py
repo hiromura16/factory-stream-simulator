@@ -1,4 +1,3 @@
-# モジュール読解: 宣言した通常・異常シナリオから配布プリセットと一覧を生成する。既存CLI説明は維持する。
 """Rebuild the public, credential-free preset library. No network or writes to a DB."""
 
 from __future__ import annotations
@@ -10,14 +9,15 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from config import RunSpec, FieldRule, Condition  # noqa: E402
 from generation import validate_generation  # noqa: E402
+from scripts.preset_catalog import write_catalog  # noqa: E402
 
 
-# 読解 library: 指定用途に対応する通常・異常シナリオを、ID付きの実行設定に組み立てる。
 def library(kind):
+    """指定ツールの正常・異常シナリオをID付きの実行設定として返す。"""
     result = {}
 
-    # 読解 library.add: 用途別の共通テンプレートと表示説明から1件の設定を作り、IDで一覧に登録する。
     def add(identity, name, description, rows=120, rate=0):
+        """共通の初期値と付与された説明から、新しいプリセットを登録する。"""
         spec = RunSpec(
             name=name,
             description=description,
@@ -262,16 +262,30 @@ def library(kind):
         s.fields[5].condition = Condition(
             field="status", operator="eq", value="stopped", then_value=0
         )
-        for identity, name, operation, mean in [
-            ("21-insert-seed", "CRUD 1 / 初回追加", "insert", 40),
-            ("22-upsert-refresh", "CRUD 2 / 同じキーを更新", "upsert", 70),
-            ("23-update-existing", "CRUD 3 / 既存行だけ更新", "update", 90),
+        for identity, name, operation, mean, description in [
+            (
+                "21-insert-seed",
+                "CRUD 1 / 初回追加",
+                "insert",
+                40,
+                "demo_upsertの初回投入用です。同じ主キーで繰り返し追加すると重複します。",
+            ),
+            (
+                "22-upsert-refresh",
+                "CRUD 2 / 同じキーを更新",
+                "upsert",
+                70,
+                "demo_upsertへ追加または更新します。21と同じキーを再利用でき、繰り返し実行できます。",
+            ),
+            (
+                "23-update-existing",
+                "CRUD 3 / 既存行だけ更新",
+                "update",
+                90,
+                "21または22で投入したdemo_upsertの行を、同じ主キーで更新します。",
+            ),
         ]:
-            s = add(
-                identity,
-                name,
-                "demo_upsertへ同じrun_keyとseedで120件生成。21は初回だけ、22は繰り返し可能、23は21または22の実行後に使用します。",
-            )
+            s = add(identity, name, description)
             s.run_key = "crud-demo"
             s.sql.table = "demo_upsert"
             s.sql.operation = operation
@@ -681,28 +695,15 @@ def library(kind):
     return result
 
 
-# 読解 write_library: 各プリセットをJSONに書き出し、件数や用途も掲載したREADMEを同じ出力先に作る。
 def write_library(kind, directory):
+    """配布用のJSONと、用途を確認するための索引を出力する。"""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    rows = [
-        "# プリセット一覧",
-        "",
-        f"{kind}: 48種類（通常24・異常24）。接続プロファイルは別途選択できます。各JSONを画面から編集・複製・保存できます。",
-        "",
-        "| ID | 表示名 | 件数 | 用途・条件 |",
-        "| --- | --- | ---: | --- |",
-    ]
     for identity, spec in library(kind).items():
         (directory / (identity + ".json")).write_text(
-            spec.model_dump_json(indent=2) + "\n"
+            spec.model_dump_json(indent=2) + "\n", encoding="utf-8"
         )
-        rows.append(
-            f"| {identity} | {spec.name} | {spec.rows:,} | "
-            + spec.description.replace("\n", "<br>")
-            + " |"
-        )
-    (directory / "README.md").write_text("\n".join(rows) + "\n")
+    write_catalog(directory)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,13 @@
+{
+  "services": {
+    "app": {
+      "environment": {
+        "ADMIN_USERNAME": "${ADMIN_USERNAME:?set ADMIN_USERNAME in .env}",
+        "ADMIN_PASSWORD_FILE": "/run/secrets/factory-admin-password"
+      },
+      "volumes": [
+        "${ADMIN_PASSWORD_FILE:?set ADMIN_PASSWORD_FILE in .env}:/run/secrets/factory-admin-password:ro"
+      ]
+    }
+  }
+}

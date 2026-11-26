@@ -1,0 +1,3 @@
+# 配布元のJSをそのまま含めるため、空白も配布版を維持する。
+static/redoc/redoc.standalone.js -whitespace linguist-vendored
+static/swagger/swagger-ui-bundle.js linguist-vendored

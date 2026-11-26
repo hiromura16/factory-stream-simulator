@@ -1,0 +1,29 @@
+{
+  "services": {
+    "app": {
+      "networks": {
+        "default": {},
+        "lakehouse": {
+          "aliases": [
+            "factory-stream-simulator"
+          ]
+        }
+      }
+    },
+    "mqtt": {
+      "networks": {
+        "lakehouse": {
+          "aliases": [
+            "factory-stream-mqtt"
+          ]
+        }
+      }
+    }
+  },
+  "networks": {
+    "lakehouse": {
+      "external": true,
+      "name": "${LAKEHOUSE_NETWORK:?Set LAKEHOUSE_NETWORK}"
+    }
+  }
+}

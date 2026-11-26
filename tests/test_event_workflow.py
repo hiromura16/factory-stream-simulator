@@ -1,5 +1,7 @@
 """外部ブローカーを使わず、プレビューと合成MQTT送信の一致を確かめる。"""
 
+from test_operation_gate import confirmed_post
+
 import json
 import time
 from pathlib import Path
@@ -65,7 +67,7 @@ def test_mqtt_preview_matches_simulated_delivery_and_does_not_send(monkeypatch):
         assert all(item["bytes"] == 256 and item["duplicate"] for item in messages)
         assert json.loads(messages[0]["payload"])["label"] == "温度"
 
-        accepted = client.post("/api/runs", json=spec)
+        accepted = confirmed_post(client,"/api/runs", json=spec)
         assert accepted.status_code == 202, accepted.text
         run_id = accepted.json()["id"]
         for _ in range(100):
@@ -186,9 +188,9 @@ def test_preview_then_same_id_edit_requires_review_and_does_not_redirect(monkeyp
             assert job["spec"]["connection_revision"] == revision
 
         assert_completed(
-            client.post("/api/runs", json=current, headers=current_headers), 2
+            confirmed_post(client,"/api/runs", json=current, headers=current_headers), 2
         )
         assert sent_profiles == [("127.0.0.2", "synthetic/new")]
         # CLI/APIは従来どおり、ヘッダーなしの歴史的な版を明示利用できる。
-        assert_completed(client.post("/api/runs", json=spec), 1)
+        assert_completed(confirmed_post(client,"/api/runs", json=spec), 1)
         assert sent_profiles[-1] == ("127.0.0.1", "synthetic/old")

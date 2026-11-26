@@ -1,17 +1,16 @@
-# モジュール読解: 製造・MES/ERPの試験シナリオを宣言モデルとして組み立てる。
 # 品質異常と処理障害を区別した期待条件を記述し、実行・検証済みとは主張しない。
 """Manufacturing MES/ERP data anomalies and bounded, app-local processing faults."""
 
 from config import AnomalyRule, FaultOptions, FieldRule, RunSpec
 
 
-# 読解 key: シナリオに共通の再現可能ID項目を新しく返す。主キーと長さ制約を一箇所へ揃える。
 def key():
+    """同じシナリオを再実行しても同じ値になる主キー項目を返す。"""
     return FieldRule(name="id", generator="record_id", primary_key=True, length=64)
 
 
-# 読解 at: シナリオ用日時項目を返す。開始日時はパラメーターを参照し、通番ごとに進める。
 def at():
+    """開始日時パラメーターを基準に、通番ごとに進む日時項目を返す。"""
     return FieldRule(
         name="event_time",
         data_type="datetime",
@@ -21,9 +20,9 @@ def at():
     )
 
 
-# 読解 dataset: 既知のシナリオ種別に合わせてspecの表名・項目・パラメーターを変更する。
 # DBに表を作る処理ではなく、後続の異常規則が参照する生成契約を準備する。
 def dataset(spec, kind):
+    """シナリオに合わせてテーブル名・生成項目・パラメーターを書き換える。"""
     if kind == "quality":
         spec.sql.table = "scenario_mes_quality"
         spec.fields = [
@@ -186,12 +185,11 @@ def dataset(spec, kind):
         ]
 
 
-# 読解 anomaly_library: 指定ツール向けの正常基準と異常ケースをRunSpec群として構築して返す。
 # 生成定義だけを作り、接続先への投入やテスト実行はしない。
 def anomaly_library(tool):
+    """指定ツール向けの正常・異常ケースを、プリセットIDをキーにして返す。"""
     items = {}
 
-    # 読解 anomaly_library.add: 番号と説明からID付きRunSpecを作り、必要なdatasetと異常規則を組み立てitemsへ登録する。
     # 説明は期待する観測条件であり、実行済みの検証結果ではない。
     def add(
         number,
@@ -206,6 +204,7 @@ def anomaly_library(tool):
         data=None,
         **rule,
     ):
+        """正常データの定義へ異常条件を追加し、IDを付けて登録する。"""
         identity = f"{number:02d}-{slug}"
         spec = RunSpec(
             name="異常 / " + title,
