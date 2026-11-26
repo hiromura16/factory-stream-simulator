@@ -91,6 +91,8 @@ const action =
   });
 // 指定IDのタブと対応するナビ項目だけを選択状態にし、切替前のヘルプを閉じる。
 function tab(id) {
+  const panels = [$("#historyList"), $("#currentJob")];
+  for (const panel of panels) rememberJobPanes(panel);
   document
     .querySelectorAll(".tab")
     .forEach(/* 実際のタブ要素はDOMのIDで選択状態を判定する。 */ (n) => n.classList.toggle("active", n.id === id));
@@ -98,6 +100,7 @@ function tab(id) {
     .querySelectorAll(".nav")
     .forEach(/* ナビ項目はdata-tabで選択先との一致を判定する。 */ (n) => n.classList.toggle("active", n.dataset.tab === id));
   hideTip();
+  for (const panel of panels) restoreJobPanes(panel);
 }
 // スキーマ内のローカル参照をルートの定義から解決する。参照でなければ元を返す。
 function deref(schema, root) {
@@ -1362,33 +1365,204 @@ function jobCard(run) {
   }
   const detail = el("details", { "data-run-id": run.id });
   detail.append(el("summary", {}, "実行設定と詳細"));
-  detail.append(el("pre", {}, JSON.stringify(run, null, 2)));
+  const json = JSON.stringify(run, null, 2);
+  detail.append(el("pre", { tabindex: "0" }, json));
+  lastJobJson.set(c, json);
   c.append(detail);
   return c;
 }
-// 同じ領域・実行IDの開閉を引き継ぎ、別の実行や表示領域には波及させない。
-function replaceJobCards(container, runs) {
-  const openIds = new Set(
-    Array.from(
-      container.querySelectorAll("details[data-run-id][open]"),
-      (detail) => detail.dataset.runId,
-    ),
-  );
-  const focused = document.activeElement;
-  const focusedId = focused?.tagName === "SUMMARY" && container.contains(focused)
-    ? focused.parentElement.dataset.runId
+const jobPanePositions = new WeakMap();
+// 非表示中はブラウザーが返す座標0で上書きせず、開いている同じ実行の記録だけを使う。
+function rememberJobPanes(container) {
+  const previous = jobPanePositions.get(container);
+  const positions = new Map();
+  for (const detail of container.querySelectorAll("details[data-run-id][open]")) {
+    const pane = detail.querySelector("pre");
+    const id = detail.dataset.runId;
+    positions.set(id, pane.getClientRects().length
+      ? [pane.scrollTop, pane.scrollLeft]
+      : previous?.get(id) ?? [0, 0]);
+  }
+  jobPanePositions.set(container, positions);
+  return positions;
+}
+
+// DOMへ接続され、表示されてからだけ復元する。短いJSONではブラウザーが範囲内へ収める。
+function restoreJobPanes(container) {
+  const positions = jobPanePositions.get(container);
+  for (const detail of container.querySelectorAll("details[data-run-id][open]")) {
+    const position = positions?.get(detail.dataset.runId);
+    const pane = detail.querySelector("pre");
+    if (!position || !pane.getClientRects().length) continue;
+    [pane.scrollTop, pane.scrollLeft] = position;
+  }
+}
+
+const jobWheelAnchorMs = 5000; // 2.5秒の履歴更新間隔をまたいで閲覧対象を保持する。
+let recentJobWheel;
+
+// 実際にホイールを使った表示枠を記憶する。再描画でポインター直下が変わっても対象を変えない。
+document.addEventListener("wheel", (event) => {
+  const pane = event.target.closest?.("details[data-run-id][open] pre");
+  recentJobWheel = pane
+    ? { pane, x: event.clientX, y: event.clientY, at: performance.now() }
     : undefined;
-  let nextFocus;
-  const cards = runs.map((run) => {
-    const card = jobCard(run);
+}, { passive: true });
+document.addEventListener("pointermove", (event) => {
+  if (recentJobWheel &&
+      (event.clientX !== recentJobWheel.x || event.clientY !== recentJobWheel.y))
+    recentJobWheel = undefined;
+});
+document.addEventListener("pointerdown", () => { recentJobWheel = undefined; });
+document.addEventListener("pointerout", (event) => {
+  if (!event.relatedTarget) recentJobWheel = undefined;
+});
+
+// 選択、フォーカス、直近のホイールを優先する。手掛かりが競合する場合は強制移動しない。
+function readingJobAnchor(...containers) {
+  let selected, focused, wheeled;
+  const scrolled = [];
+  const visible = [];
+  const currentFocus = document.activeElement;
+  if (recentJobWheel && performance.now() - recentJobWheel.at >= jobWheelAnchorMs)
+    recentJobWheel = undefined;
+  for (const container of containers) {
+    for (const detail of container.querySelectorAll("details[data-run-id][open]")) {
+      const pane = detail.querySelector("pre");
+      const summary = detail.querySelector("summary");
+      const anchor = (element, part) => {
+        const bounds = element.getBoundingClientRect();
+        if (bounds.bottom > 0 && bounds.top < window.innerHeight)
+          return { container, id: detail.dataset.runId, part, top: bounds.top };
+      };
+      const jsonAnchor = anchor(pane, "pre");
+      if (currentFocus === summary) focused ??= anchor(summary, "summary");
+      if (!jsonAnchor) continue;
+      if (jobPaneSelected(pane)) selected ??= jsonAnchor;
+      if (currentFocus === pane) focused ??= jsonAnchor;
+      if (recentJobWheel?.pane === pane) wheeled = jsonAnchor;
+      if (pane.scrollTop > 0 || pane.scrollLeft > 0) scrolled.push(jsonAnchor);
+      visible.push(jsonAnchor);
+    }
+  }
+  return selected ?? focused ?? wheeled
+    ?? (scrolled.length === 1 ? scrolled[0] : undefined)
+    ?? (visible.length === 1 && window.scrollY > 0 ? visible[0] : undefined);
+}
+
+// 並び替えや前方への追加後も、読んでいた部分の画面内の位置を保つ。
+function restoreJobAnchor(anchor) {
+  if (!anchor) return;
+  for (const detail of anchor.container.querySelectorAll("details[data-run-id][open]")) {
+    if (detail.dataset.runId !== anchor.id) continue;
+    const top = detail.querySelector(anchor.part).getBoundingClientRect().top;
+    const shift = top - anchor.top;
+    if (Math.abs(shift) > 0.5)
+      window.scrollBy({ top: shift, behavior: "instant" });
+    return;
+  }
+}
+
+const pendingJobText = new Map();
+const lastJobJson = new WeakMap();
+
+// 選択範囲がJSONに触れている間は、既存のテキストノードを入れ替えない。
+function jobPaneSelected(pane) {
+  const selection = document.getSelection?.();
+  if (!selection || selection.isCollapsed) return false;
+  for (let index = 0; index < selection.rangeCount; index++) {
+    if (selection.getRangeAt(index).intersectsNode(pane)) return true;
+  }
+  return false;
+}
+
+// 同じ本文には触れず、選択解除時に最新の内容だけを同じ表示枠へ反映する。
+function writeJobText(pane, json) {
+  if (pane.textContent === json) {
+    pendingJobText.delete(pane);
+    return;
+  }
+  if (jobPaneSelected(pane)) {
+    pendingJobText.set(pane, json);
+    return;
+  }
+  pendingJobText.delete(pane);
+  const { scrollTop, scrollLeft } = pane;
+  pane.textContent = json;
+  pane.scrollTop = scrollTop;
+  pane.scrollLeft = scrollLeft;
+}
+
+document.addEventListener("selectionchange", () => {
+  for (const [pane, json] of pendingJobText) {
+    if (!pane.isConnected) pendingJobText.delete(pane);
+    else writeJobText(pane, json);
+  }
+});
+
+// 読んでいるカード自体を移動せず、その前後を並べ替える。
+function orderJobCards(container, cards, reading) {
+  const keep = new Set(cards);
+  for (const card of Array.from(container.children)) {
+    if (keep.has(card)) continue;
+    const pane = card.querySelector("pre");
+    if (pane) pendingJobText.delete(pane);
+    card.remove();
+  }
+  const anchor = cards.indexOf(reading);
+  let next = null;
+  for (let index = cards.length - 1; index >= 0; index--) {
+    const card = cards[index];
+    if (index !== anchor &&
+        (card.parentElement !== container || card.nextElementSibling !== next)) {
+      container.insertBefore(card, next);
+    }
+    next = card;
+  }
+}
+
+// 履歴の行を更新しても、同じ実行の見出し・本文・選択は同じDOMに保つ。
+function replaceJobCards(container, runs, readingId) {
+  const positions = rememberJobPanes(container);
+  const existing = new Map();
+  const focused = document.activeElement;
+  let reading, nextFocus;
+  for (const card of container.children) {
     const detail = card.querySelector("details");
-    detail.open = openIds.has(run.id);
-    if (focusedId === run.id) nextFocus = detail.querySelector("summary");
+    if (!detail) continue;
+    existing.set(detail.dataset.runId, card);
+    const pane = detail.querySelector("pre");
+    if (jobPaneSelected(pane)) reading = card;
+    if (focused === pane || focused === detail.querySelector("summary")) {
+      nextFocus = focused;
+      reading ??= card;
+    }
+  }
+  reading ??= existing.get(readingId);
+  const remaining = new Map();
+  const cards = runs.map((run) => {
+    const card = existing.get(run.id);
+    const json = JSON.stringify(run, null, 2);
+    if (!card) return jobCard(run);
+    const position = positions.get(run.id);
+    if (position) remaining.set(run.id, position);
+    if (lastJobJson.get(card) === json) return card;
+    lastJobJson.set(card, json);
+    const detail = card.querySelector("details");
+    const replacement = jobCard(run);
+    // 設定編集や停止ボタンは新しい応答で作り直し、詳細だけは接続したまま残す。
+    while (card.firstElementChild !== detail) card.firstElementChild.remove();
+    for (const child of Array.from(replacement.children)) {
+      if (child.tagName !== "DETAILS") card.insertBefore(child, detail);
+    }
+    writeJobText(detail.querySelector("pre"), json);
     return card;
   });
-  container.replaceChildren(...cards);
-  // キーボード操作中は、差し替え後の同じ実行の見出しへ戻す。
-  nextFocus?.focus({ preventScroll: true });
+  orderJobCards(container, cards, reading);
+  jobPanePositions.set(container, remaining);
+  restoreJobPanes(container);
+  if (nextFocus?.isConnected && document.activeElement !== nextFocus)
+    nextFocus.focus({ preventScroll: true });
 }
 let requestedHistory = 0;
 let renderedHistory = 0;
@@ -1400,11 +1574,15 @@ async function refreshHistory() {
   if (request < renderedHistory) return;
   renderedHistory = request;
   // 応答を待っている間の操作も反映できるよう、開閉状態は描画直前に読む。
-  replaceJobCards($("#historyList"), runs);
-  const current = runs.find(/* 実行中または停止処理中の一覧項目を現在の実行として選ぶ。 */ (r) => ["running", "stopping"].includes(r.status));
+  const history = $("#historyList");
   const currentJob = $("#currentJob");
+  const anchor = readingJobAnchor(history, currentJob);
+  replaceJobCards(history, runs, anchor?.container === history ? anchor.id : undefined);
+  const current = runs.find(/* 実行中または停止処理中の一覧項目を現在の実行として選ぶ。 */ (r) => ["running", "stopping"].includes(r.status));
   currentJob.hidden = !current;
-  replaceJobCards(currentJob, current ? [current] : []);
+  replaceJobCards(currentJob, current ? [current] : [],
+    anchor?.container === currentJob ? anchor.id : undefined);
+  restoreJobAnchor(anchor);
   if (current) {
     state.current = current.id;
   } else if (state.current) {
