@@ -27,3 +27,41 @@ jobs:
           uv run --frozen python scripts/check_shared.py
       - if: matrix.python == '3.12'
         run: docker build -t factory-source:test .
+      - name: Smoke-test the built container
+        if: matrix.python == '3.12'
+        run: |
+          docker run --detach --name factory-smoke --env AUTO_START=1 factory-source:test
+          trap 'docker rm --force factory-smoke >/dev/null' EXIT
+          if ! docker exec -i factory-smoke python - <<'PY'
+          import json
+          import time
+          from urllib.error import URLError
+          from urllib.request import urlopen
+
+          def read(path):
+              with urlopen("http://127.0.0.1:8080" + path, timeout=2) as response:
+                  return response.read()
+
+          deadline = time.monotonic() + 30
+          while True:
+              try:
+                  read("/healthz")
+                  break
+              except (URLError, TimeoutError):
+                  if time.monotonic() >= deadline:
+                      raise
+                  time.sleep(0.25)
+
+          paths = json.loads(read("/openapi.json"))["paths"]
+          assert "/api/operations/plan" in paths
+          assert read("/help/mcp.html")
+          if "/api/state" in paths:
+              state = json.loads(read("/api/state"))
+              assert state["status"] == "stopped" and state["produced"] == 0, state
+          else:
+              assert json.loads(read("/api/runs"))["runs"] == []
+          PY
+          then
+            docker logs factory-smoke
+            exit 1
+          fi
