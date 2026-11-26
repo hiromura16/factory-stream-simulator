@@ -365,7 +365,13 @@ def install_help(app, root, studio, kind, credentials):
                         "description": "確認が必要な操作では計画APIが返すトークンを指定します。",
                         "schema": {"type": "string"},
                     })
-                    operation["responses"]["428"] = {"description": "実行する設定と接続先の版の確認が必要です。"}
+                    operation["responses"]["428"] = {
+                        "description": (
+                            "実行前の確認エラーです。detail[0].code で未確認（confirmation_required）、"
+                            "無効・使用済み（confirmation_invalid）、期限切れ（confirmation_expired）、"
+                            "操作や前提の不一致（confirmation_mismatch）を区別できます。"
+                        ),
+                    }
                 if method != "get":
                     if "requestBody" not in operation:
                         operation["requestBody"] = {

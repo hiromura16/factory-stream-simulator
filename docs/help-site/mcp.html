@@ -105,7 +105,7 @@ uv run --frozen python cli.py status
 <p><code>preview</code> で見本を確認します。</p>
 </li>
 <li>
-<p>人が開始先、接続の版、処理内容を確認するために、CLIで計画を作ります。ファイルは既存のものと重複しない名前にします。</p>
+<p>人が開始先、接続の版、処理内容を確認するために、CLIで計画を作ります。確認ファイルは、運用者とMCPが管理する専用のディレクトリに置きます。</p>
 <pre><code class="language-bash">uv run --frozen python cli.py plan --spec template.json \
   --confirmation-file private/start-confirmation
 </code></pre>
@@ -118,6 +118,13 @@ uv run --frozen python cli.py status
 </li>
 </ol>
 <p>MCPで開始する場合は、起動時に登録した <code>confirmation_file</code> と同じパスへ計画のトークンを書き出し、その後に人が許可して <code>start</code> を <code>execute: true</code> で呼びます。確認トークンの値をチャットや引数に貼り付ける必要はありません。トークンはファイル（権限0600）にだけ保存されます。設定内容と接続先の版は計画と実行で揃えてください。ログの固定プロファイル版が必要なときはCLIの計画・開始に <code>--profile-revision</code> を付け、MCPなら開始時に同じ <code>profile_revision</code> を指定します。CLIの計画は、通常の開始に確認が不要な場合も確認トークンを要求します。MCPの実開始は確認APIを備えたアプリに限ります。</p>
+<h3 id="同じ確認ファイルで繰り返す">同じ確認ファイルで繰り返す</h3>
+<p>MCPでアプリが開始を受け付けると、その要求に使用した確認ファイルを自動で削除します。次の実行では、人が同じパスに <code>plan</code> を実行して、改めて計画を確認します。</p>
+<p>期限切れ・設定の違いで拒否された場合や、通信が切れて結果が分からない場合、確認ファイルは残ります。先に <code>status</code> または <code>get_status</code> で実行の有無を確かめてください。実行する必要がある場合は、人が次のコマンドで同じパスに再発行します。</p>
+<pre><code class="language-bash">uv run --frozen python cli.py plan --replace --spec template.json \
+  --confirmation-file private/start-confirmation
+</code></pre>
+<p>再発行の途中で別の確認ファイルが保存された場合は、そのファイルを保護するために失敗します。ファイルを作り直した人に内容を確認してください。</p>
 <p>SQLのテーブル準備には <code>plan --operation prepare</code> と <code>prepare</code>、ストリームの再送には <code>plan --operation retry</code> と <code>retry</code> を使います。確認を要求する条件と拒否理由は、それぞれのアプリのOpenAPIを参照してください。</p>
 <p>仕様は <a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/transports">MCP 2025-11-25のstdio</a> と <a href="https://modelcontextprotocol.io/specification/2025-11-25/server/tools">toolsの契約</a> に従います。起動時に 2025-11-25 または 2025-06-18 をネゴシエートします。</p>
 </article>

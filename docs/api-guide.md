@@ -49,12 +49,13 @@ POSTには `Content-Type: application/json` を付けます。入力のない停
 2. 応答の `summary` にある操作、出力先、版、テーブル・件数を確認します。ログの開始URLに `profile_revision` を使う場合は、計画のJSONにも同じ値を指定します。
 3. `confirmation_required` が `true` のときは、同じ設定と `X-Operation-Confirmation` ヘッダーで実行します。トークンは短時間で失効し、1回だけ使用できます。設定または接続先の版が変わると再確認が必要です。
 
-428は確認が必要な応答です。CLIは `plan` コマンドで確認用ファイルを作成できます。
+HTTP 428では本文の `detail` を確認します。未指定なら計画を確認し、有効期限切れや使用済みなら人が計画を作り直します。操作・設定・接続先の版が合わない場合は、実行したい内容で計画を取り直してください。人が確認用ファイルを作るときはCLIの `plan` コマンドを使います。
 
 ## エラーの見方
 
 | HTTP | 確認すること |
 | --- | --- |
+| 428 | `detail` の `code` を確認します。`confirmation_required` は未指定、`confirmation_expired` は期限切れ、`confirmation_invalid` は不明または使用済み、`confirmation_mismatch` は操作・設定・版の不一致です。 |
 | 422 | `detail` の場所と説明を読み、JSONのキー・型・値を直します。 |
 | 403 / 413 / 415 | 操作元、リクエストサイズ、Content-Typeを確認します。 |
 | 409 | 実行中、接続の変更、データの競合を操作の説明と照合します。 |

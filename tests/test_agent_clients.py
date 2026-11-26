@@ -49,8 +49,9 @@ def api():
             elif self.path == "/api/presets/demo/export":
                 response = {"name": "sample"}
             elif self.path == "/api/operations/plan":
+                self.server.on_plan()
                 response = {
-                    "confirmation_token": "test-confirmation",
+                    "confirmation_token": self.server.plan_token,
                     "operation": "begin",
                 }
             elif self.path.startswith("/api/operations/other"):
@@ -64,6 +65,8 @@ def api():
                 "/api/start",
                 "/api/stop",
             }:
+                self.server.on_start()
+                status = self.server.start_code
                 response = {
                     "status": "running",
                     "secret": "test-private",
@@ -103,6 +106,9 @@ def api():
     with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
         server.kind = app_kind()
         server.has_plan = True
+        server.plan_token = "test-confirmation"
+        server.start_code = 200
+        server.on_plan = server.on_start = lambda: None
         thread = Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -288,6 +294,7 @@ def test_mcp_stdio_and_mutation_boundaries(api, tmp_path):
         "synthetic" not in completed.stdout and "test-private" not in completed.stdout
     )
     assert "test-confirmation" not in completed.stdout
+    assert not confirmation.exists()
 
 
 def test_mcp_fails_closed_without_confirmation_api(api, tmp_path):
@@ -303,3 +310,103 @@ def test_mcp_fails_closed_without_confirmation_api(api, tmp_path):
     result = bridge.call_tool("start", {"app": "logs", "spec": {}, "execute": True})
     assert result["isError"] is True
     assert [r[1] for r in requests] == ["/api/info", "/openapi.json"]
+
+
+def test_mcp_confirmed_start_can_be_reissued_at_same_path(api, tmp_path):
+    from mcp_server import StdioServer
+
+    server, url, requests = api
+    app = app_kind()
+    approval = tmp_path / "token"
+    bridge = StdioServer({app: (FactoryClient(app, url), approval)})
+    args = ("--url", url, "--confirmation-file", approval)
+    call = {"app": app, "spec": {}, "execute": True}
+    for token in ("test-first", "test-second"):
+        server.plan_token = token
+        planned = run_cli("plan", *args)
+        assert planned.returncode == 0, planned.stderr
+        assert token not in planned.stdout + planned.stderr
+        assert bridge.call_tool("start", call) == {"status": "running"}
+        assert requests[-1][4] == token
+        assert not approval.exists()
+    request_count = len(requests)
+    refused = bridge.call_tool("start", call)
+    assert refused["isError"]
+    assert len(requests) == request_count
+
+
+@pytest.mark.parametrize("status", [422, 428])
+def test_mcp_rejected_start_keeps_approval_for_operator_to_replace(api, tmp_path, status):
+    from mcp_server import StdioServer
+
+    server, url, _ = api
+    app = app_kind()
+    approval = tmp_path / "token"
+    args = ("--url", url, "--confirmation-file", approval)
+    bridge = StdioServer({app: (FactoryClient(app, url), approval)})
+    call = {"app": app, "spec": {}, "execute": True}
+    assert run_cli("plan", *args).returncode == 0
+
+    server.start_code = status
+    result = bridge.call_tool("start", call)
+    assert result["isError"] and result["structuredContent"]["status"] == status
+    assert approval.read_text().strip() == "test-confirmation"
+
+    server.plan_token = "new-confirmation"
+    replacement = run_cli("plan", "--replace", *args)
+    assert replacement.returncode == 0, replacement.stderr
+    assert server.plan_token not in replacement.stdout + replacement.stderr
+    assert approval.read_text().strip() == server.plan_token
+    if os.name == "posix":
+        assert approval.stat().st_mode & 0o777 == 0o600
+
+
+def test_approval_replaced_during_execution_or_planning_is_preserved(api, tmp_path):
+    from mcp_server import StdioServer
+
+    server, url, _ = api
+    app = app_kind()
+    approval = tmp_path / "token"
+    args = ("--url", url, "--confirmation-file", approval)
+    assert run_cli("plan", *args).returncode == 0
+
+    def replace_file():
+        replacement = tmp_path / "other"
+        replacement.write_text("different-approval")
+        replacement.chmod(0o600)
+        replacement.replace(approval)
+
+    server.on_start = replace_file
+    bridge = StdioServer({app: (FactoryClient(app, url), approval)})
+    assert bridge.call_tool("start", {"app": app, "spec": {}, "execute": True}) == {
+        "status": "running"
+    }
+    assert approval.read_text() == "different-approval"
+
+    server.on_plan = replace_file
+    failed = run_cli("plan", "--replace", *args)
+    assert failed.returncode == 2 and "変更されました" in failed.stderr
+    assert approval.read_text() == "different-approval"
+    assert not list(tmp_path.glob(".confirmation-*"))
+
+
+def test_mcp_refuses_invalid_file_without_contacting_api(api, tmp_path):
+    from mcp_server import StdioServer
+
+    _, url, requests = api
+    app = app_kind()
+    target = tmp_path / "other"
+    target.write_text("test-confirmation")
+    target.chmod(0o600)
+    approval = tmp_path / "token"
+    try:
+        approval.symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    bridge = StdioServer({app: (FactoryClient(app, url), approval)})
+    result = bridge.call_tool("start", {"app": app, "spec": {}, "execute": True})
+    assert result["isError"] and not requests
+    failed = run_cli("plan", "--replace", "--url", url, "--confirmation-file", approval)
+    assert failed.returncode == 2 and not requests
+    assert approval.is_symlink()
+    assert target.read_text() == "test-confirmation"
