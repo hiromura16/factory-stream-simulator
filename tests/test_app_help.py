@@ -65,6 +65,9 @@ def test_local_help_swagger_and_examples(make_app):
         document = client.get("/docs").text
         assert "/static/swagger/swagger-ui-bundle.js" in document
         assert "https://" not in document
+        redoc = client.get("/redoc")
+        assert 'type="module"' in redoc.text
+        assert "connect-src 'self'" in redoc.headers["Content-Security-Policy"]
         assert client.get("/static/swagger/swagger-ui-bundle.js").status_code == 200
         schema = client.get("/openapi.json").json()
         operations = [

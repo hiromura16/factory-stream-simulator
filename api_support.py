@@ -279,7 +279,8 @@ def install_help(app, root, studio, kind, credentials):
         source = escape(prefix + app.openapi_url, quote=True)
         asset = escape(prefix + "/static/redoc/redoc.standalone.js", quote=True)
         title = escape(f"{app.title} | ReDoc")
-        return HTMLResponse(f'''<!doctype html>
+        return HTMLResponse(
+            f'''<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8">
@@ -288,9 +289,13 @@ def install_help(app, root, studio, kind, credentials):
   <title>{title}</title>
   <script type="module" src="{asset}"></script>
 </head>
-<body style="margin:0"><redoc spec-url="{source}" disable-telemetry></redoc></body>
+<body style="margin:0"><redoc spec-url="{source}" disable-telemetry="true"></redoc></body>
 </html>
-''')
+''',
+            headers={
+                "Content-Security-Policy": "connect-src 'self'; img-src 'self' data:"
+            },
+        )
 
     build_openapi = app.openapi
 
