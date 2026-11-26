@@ -1,0 +1,96 @@
+{
+  "name": "設備テレメトリ / ライン別トピック / 欠測あり",
+  "description": "【想定】設備がMQTTでテレメトリを送る。トピックはライン・設備ごと。\n【異常】電流が2%欠測。100〜149件目で振動値が固着。",
+  "run_key": "telemetry-001",
+  "seed": 11,
+  "rows": 3,
+  "target_rate": 20,
+  "batch_size": 50,
+  "parameters": {
+    "start_time": "2026-12-01T00:00:00+09:00",
+    "lines": [
+      "L1",
+      "L2"
+    ]
+  },
+  "fields": [
+    {
+      "name": "event_id",
+      "data_type": "string",
+      "generator": "record_id",
+      "primary_key": true,
+      "length": 64
+    },
+    {
+      "name": "line",
+      "data_type": "string",
+      "generator": "choice",
+      "choices": "$lines",
+      "length": 8
+    },
+    {
+      "name": "machine_no",
+      "data_type": "integer",
+      "generator": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    {
+      "name": "machine_id",
+      "data_type": "string",
+      "generator": "template",
+      "template": "M-{machine_no:02d}",
+      "length": 8
+    },
+    {
+      "name": "vibration",
+      "data_type": "number",
+      "generator": "normal",
+      "mean": 2.0,
+      "stddev": 0.3,
+      "scale": 3
+    },
+    {
+      "name": "current_a",
+      "data_type": "number",
+      "generator": "uniform",
+      "minimum": 10,
+      "maximum": 12,
+      "scale": 2,
+      "null_probability": 0.02
+    },
+    {
+      "name": "at",
+      "data_type": "datetime",
+      "generator": "timestamp",
+      "start": "$start_time",
+      "step": 1
+    }
+  ],
+  "anomalies": [
+    {
+      "name": "振動の固着",
+      "field": "vibration",
+      "operation": "freeze",
+      "from_row": 100,
+      "to_row": 149
+    }
+  ],
+  "stream": {
+    "envelope": true,
+    "metadata_key": "_source",
+    "topic_template": "factory/{line}/{machine_id}/telemetry",
+    "payload_template": {
+      "id": "$row.event_id",
+      "machine": {
+        "line": "$row.line",
+        "id": "$row.machine_id"
+      },
+      "metrics": {
+        "vibration": "$row.vibration",
+        "current_a": "$row.current_a"
+      },
+      "ts": "$row.at"
+    }
+  }
+}

@@ -1,5 +1,4 @@
-# モジュール読解: 合成行の送信前保存、宛先固定の再送、配送方式別の完了判定をまとめる。
-"""Configurable MQTT/HTTP delivery with a destination-bound persistent outbox."""
+"""合成イベントを宛先にひも付けて保存し、記録専用モード以外は配送する。"""
 
 from __future__ import annotations
 
@@ -37,11 +36,13 @@ from stream_events import build_events, check_stream_profile, check_stream_topic
 
 
 @contextmanager
-def outbox():
+def outbox(*, check_same_thread=True):
     """送信待ち履歴のSQLiteを開き、トランザクション終了後に接続を閉じる。"""
     root = Path(os.environ.get("DATA_DIR", "./data"))
     root.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(root / "outbox.sqlite3", timeout=15)
+    conn = sqlite3.connect(
+        root / "outbox.sqlite3", timeout=15, check_same_thread=check_same_thread
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=FULL")
@@ -89,15 +90,15 @@ def fingerprint(profile):
 
 class NoRedirect(HTTPRedirectHandler):
     """HTTP転送先へ送信を引き継がないハンドラー。"""
-    # 読解 NoRedirect.redirect_request: 転送要求を作らず、元の宛先向け本文と認証を別のURLへ渡さない。
     def redirect_request(self, *args, **kwargs):
+        """本文や認証情報を別の宛先へ送らないよう、転送を拒否する。"""
         return None
 
 
 class Sender:
     """配送方式別のクライアントと送信処理をまとめる。"""
-    # 読解 Sender.__init__: 方式別の接続を準備する。HTTPは転送と環境プロキシを使わず、MQTTは接続受理を待つ。
     def __init__(self, profile):
+        """配送先に接続する。HTTP転送と環境プロキシは無効にし、MQTTは接続受理を待つ。"""
         self.profile, self.client = profile, None
         self.extra = None
         if profile.kind in TRANSPORTS:
@@ -153,7 +154,6 @@ class Sender:
             )
             self.client.connect_timeout = profile.timeout_seconds
 
-            # 読解 Sender.__init__.on_connect: 接続理由コードから受理の成否を記録し、同期側の待機を解除する。
             def on_connect(client, userdata, flags, reason, properties):
                 self.accepted = reason == 0
                 connected.set()
@@ -181,8 +181,8 @@ class Sender:
         elif profile.kind != "capture":
             raise GenerationError("MQTT／HTTP／ローカル記録の接続先を指定してください")
 
-    # 読解 Sender.send: アウトボックス項目を方式に従って送る。HTTPは本文形式が混在するバッチを拒否し、MQTTは送信完了を待つ。
     def send(self, entries):
+        """アウトボックスの項目を送る。HTTPの混在形式は拒否し、MQTTは選んだQoSでの送信完了を待つ。"""
         if self.extra:
             return self.extra.send(entries)
         if not entries:
@@ -247,7 +247,6 @@ class Sender:
                     ):
                         raise RuntimeError("HTTP受信先から一部失敗が返されました")
 
-    # 読解 Sender.close: 追加トランスポートに終了を委譲するか、MQTTの接続とループを閉じる。
     def close(self):
         if self.extra:
             return self.extra.close()
@@ -256,8 +255,8 @@ class Sender:
             self.client.loop_stop()
 
 
-# 読解 test_connection: 本文を発行せず方式別に疎通を確認する。HTTPのHEAD非対応は到達として扱い、接続は最後に閉じる。
 def test_connection(profile):
+    """本文を発行せずに疎通を確認する。HTTPでHEADが非対応でも到達は確認できる。"""
     sender = Sender(profile)
     try:
         if sender.extra:
@@ -398,6 +397,7 @@ def handle(spec, ctx, profile, store):
     step = batch_limit(
         spec,
         min(spec.batch_size, spec.target_rate) if spec.target_rate else spec.batch_size,
+        kind="stream",
     )
     if spec.stream.message_size_bytes:
         step = min(step, max(1, 4 * 1024 * 1024 // spec.stream.message_size_bytes))
@@ -477,6 +477,43 @@ def summary():
         }
 
 
+def capture_rows(store, limit, *, before=None, row_id=None, include_payload=False):
+    """記録専用の接続履歴に一致する保存行だけを、新しい順で取得する。
+
+    SQLiteのstatusは配送待ちとローカル記録の区別に使えない。
+    接続IDと宛先の照合値を両方検査し、同じ接続IDの外部配送データも除外する。
+    """
+    targets = sorted(
+        {(profile.id, fingerprint(profile)) for profile in store.profile_versions_of_kind("capture")}
+    )
+    if not targets:
+        return
+    columns = "o.rowid AS id,o.profile_id,o.record_key,o.topic,o.created_at"
+    columns += ",length(CAST(o.payload AS BLOB)) AS bytes"
+    if include_payload:
+        columns += ",o.payload"
+    query = f"""
+        SELECT {columns}
+          FROM json_each(?) AS target
+          JOIN outbox_v2 AS o
+            ON o.profile_id=json_extract(target.value,'$[0]')
+           AND o.target=json_extract(target.value,'$[1]')
+    """
+    args = [json.dumps(targets)]
+    if row_id is not None:
+        query += " WHERE o.rowid=?"
+        args.append(row_id)
+    elif before is not None:
+        query += " WHERE o.rowid<?"
+        args.append(before)
+    query += " ORDER BY o.rowid DESC LIMIT ?"
+    args.append(limit)
+    # StreamingResponse can resume a sequential iterator on different worker threads.
+    with outbox(check_same_thread=False) as conn:
+        for row in conn.execute(query, args):
+            yield dict(row)
+
+
 def retry(spec, ctx, profile, store):
     """現在の接続先と一致する未配送分だけを、保存順と本文形式に沿って再送する。"""
     if profile.kind == "capture":
@@ -499,7 +536,7 @@ def retry(spec, ctx, profile, store):
             if not entries:
                 break
             cursor = entries[-1]["enqueue_order"]
-            # コールバック: 連続する同じ本文形式をまとめるキーを返す。配送順序を並べ替えない。
+            # 並び替えると配送順が変わるため、同じ本文形式が連続する範囲だけをまとめる。
             for mode, mode_entries in groupby(entries, key=lambda e: e["body_mode"]):
                 group = []
                 size = 0

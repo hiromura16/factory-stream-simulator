@@ -13,7 +13,7 @@
   font-display: swap;
   unicode-range: U+0020-007E, U+00B5, U+00B7, U+00D7, U+2014, U+2026, U+2191-2193, U+3000-303F, U+3041-3096, U+3099-30FF, U+4E00, U+4E07, U+4E09-4E0B, U+4E0D-4E0E, U+4E21, U+4E26, U+4E2D, U+4E38, U+4E3B, U+4E71, U+4E86, U+4E88, U+4E8B-4E8C, U+4E92, U+4EA4, U+4EBA, U+4ECA, U+4ED5-4ED6, U+4ED8, U+4EE3, U+4EE5, U+4EEE, U+4EF6, U+4EFB, U+4F11, U+4F1D, U+4F34, U+4F3C, U+4F4D-4F4E, U+4F53, U+4F55, U+4F59, U+4F5C, U+4F7F, U+4F8B, U+4F9B, U+4F9D, U+4FA1, U+4FC2, U+4FDD, U+4FE1, U+500B, U+500D, U+5019, U+5024, U+504F, U+505C, U+5065, U+5074, U+507D, U+5099, U+50B7, U+50BE, U+50CD, U+50CF, U+5104, U+512A, U+5143, U+5148, U+5165, U+5168, U+516C, U+5171, U+5177, U+5185, U+518D, U+5199, U+51AA, U+51E6, U+51FA, U+5206-5207, U+5217, U+521D, U+5224-5225, U+5229, U+5230, U+5236, U+523B, U+5247, U+524A, U+524D, U+526F, U+5272, U+529B, U+529F-52A0, U+52A9, U+52B9, U+52D5, U+52D9, U+52DD, U+5305, U+5316, U+533A, U+533F, U+534A, U+5354, U+5358, U+5370, U+5373, U+5378, U+539F, U+53B3, U+53BB, U+53C2, U+53CA, U+53CD-53CE, U+53D6-53D7, U+53E3-53E4, U+53EF-53F0, U+53F3, U+53F7, U+5404, U+5408, U+540C-540D, U+5411, U+5426, U+542B, U+544A, U+5468, U+5473, U+547C-547D, U+548C, U+54C1, U+554F, U+5668, U+56DB, U+56DE, U+56F2-56F3, U+56FA, U+5727-5728, U+5730, U+5747, U+5766, U+578B, U+57CB, U+57DF, U+57FA, U+5831, U+5834, U+5883, U+5897, U+58CA, U+58F2, U+5909, U+5916, U+591A, U+5927, U+5931, U+5951, U+5968, U+59A5, U+59A8, U+59CB, U+59D4, U+5B50, U+5B57-5B58, U+5B88-5B89, U+5B8C, U+5B9A-5B9B, U+5B9F, U+5BA3, U+5BB3, U+5BB9, U+5BC4, U+5BC6, U+5BF8, U+5BFE-5BFF, U+5C02, U+5C0A, U+5C0E-5C0F, U+5C11, U+5C3E, U+5C4A, U+5C55, U+5C5E, U+5C64-5C65, U+5C90, U+5D29, U+5DE1, U+5DE5-5DE6, U+5DE8, U+5DEE, U+5DF1, U+5DFB, U+5E03, U+5E0C, U+5E2F-5E30, U+5E38, U+5E45, U+5E73-5E74, U+5E8F, U+5E95, U+5EA6-5EA7, U+5EAB, U+5EC3, U+5EF6, U+5F0F, U+5F15, U+5F27, U+5F35, U+5F37, U+5F53, U+5F62, U+5F71, U+5F85, U+5F8C, U+5F90, U+5F93, U+5F97, U+5FA1, U+5FA9, U+5FC3, U+5FC5, U+5FDC, U+6027, U+60C5, U+60F3, U+610F, U+614B, U+61B6, U+6210, U+623B, U+6240, U+624B, U+6271, U+627F-6280, U+6291, U+6295, U+6298, U+629E, U+62BC-62BD, U+62C5, U+62D2, U+62E0-62E1, U+62EC, U+6301, U+6307, U+6319, U+632F, U+633F, U+6357, U+6368, U+6392, U+639B, U+63A1-63A2, U+63A5, U+63A8, U+63C3, U+63CF-63D0, U+63DB, U+63E1, U+63F4, U+640D, U+643A, U+6442, U+64CD, U+64EC, U+652F, U+6539, U+653E, U+6557, U+6563, U+6570, U+6574, U+6587, U+659C, U+65AD, U+65B0, U+65B9, U+65BD, U+65E2, U+65E5, U+65E7, U+6607, U+660E, U+6620, U+6642, U+666F, U+6697, U+66F4, U+66F8, U+66FF-6700, U+6709, U+671B, U+671F, U+672A-672C, U+675F, U+6761, U+6765, U+6790, U+679A, U+679C, U+67A0, U+67B6, U+67FB, U+6821, U+683C, U+6841, U+6848, U+68B1, U+68DA, U+691C, U+696D, U+69CB, U+69D8, U+6A19, U+6A21, U+6A29-6A2A, U+6A5F, U+6B04, U+6B20-6B21, U+6B62-6B63, U+6B69, U+6B74, U+6B8A-6B8B, U+6BB5, U+6BCD-6BCE, U+6BD4, U+6C0F, U+6C17, U+6C38, U+6C42, U+6C4E, U+6C7A, U+6CBF, U+6CC1, U+6CD5, U+6CE2, U+6CE8, U+6D3E, U+6D41, U+6D6E, U+6D88, U+6DF1, U+6DF7, U+6DFB, U+6E08-6E09, U+6E21, U+6E29, U+6E2C, U+6E80, U+6E90, U+6E96, U+6EDE, U+6F0F, U+6F14, U+70B9, U+7121, U+7167, U+71B1, U+7247-7248, U+7269, U+7279, U+72B6, U+72EC, U+7336, U+7387, U+73FE, U+7406, U+74B0, U+751F, U+7523, U+7528, U+7531, U+753B, U+754C, U+7559, U+7565, U+756A, U+7570, U+758E, U+7591, U+767A-767B, U+767D, U+7684, U+76BF, U+76E3-76E4, U+76EE, U+76F4, U+76F8, U+76FE, U+7701, U+771F, U+7740, U+77AC, U+77DB, U+77E5, U+77ED, U+7834, U+78BA, U+793A, U+7968, U+7981, U+79D2, U+79D8, U+79F0, U+79FB, U+7A0B, U+7A0E, U+7A2E, U+7A3C, U+7A4D, U+7A7A, U+7A81, U+7A93, U+7ACB, U+7AEF, U+7AF6, U+7B26, U+7B2C, U+7B49, U+7B54, U+7B87, U+7B97, U+7BA1, U+7BC0, U+7BC4, U+7BC9, U+7C21, U+7C8B, U+7C92, U+7CBE, U+7CFB, U+7D04, U+7D0B, U+7D0D, U+7D14, U+7D20, U+7D22, U+7D2F-7D30, U+7D42, U+7D44, U+7D4C, U+7D50, U+7D5E, U+7D61, U+7D71, U+7D76, U+7D99-7D9A, U+7DAD, U+7DCF, U+7DD2, U+7DDA, U+7DE8-7DE9, U+7E1B, U+7E26, U+7E2E, U+7E3E, U+7E70, U+7F6E, U+7F72, U+7FA4, U+7FA9, U+8005, U+80A2, U+80CC, U+80FD, U+8108, U+81EA, U+81F4, U+822C, U+826F, U+8272, U+82F1, U+8377, U+843D, U+884C, U+8853, U+885D, U+8868, U+88C5, U+88D5, U+88DC, U+88FD, U+8907, U+8981, U+898B, U+898F, U+8996, U+89A7, U+89AA, U+89B3, U+89E3, U+89E6, U+8A00, U+8A08, U+8A18, U+8A2D, U+8A31, U+8A33, U+8A3C, U+8A55, U+8A66, U+8A70, U+8A72-8A73, U+8A8D, U+8A9E, U+8AA4, U+8AAC-8AAD, U+8ABF, U+8ACB, U+8AD6, U+8B58, U+8B66, U+8B72, U+8B77, U+8C61, U+8CA0, U+8CA8, U+8CB8, U+8CBC, U+8CC7, U+8CEA, U+8CFC, U+8D64, U+8D70, U+8D77, U+8D85, U+8D8A, U+8DB3, U+8DE1, U+8DEF, U+8EE2, U+8EF8, U+8EFD, U+8F03, U+8F09, U+8F9E, U+8FBA, U+8FBC, U+8FBF, U+8FC2, U+8FD1, U+8FD4, U+8FF0, U+8FFD, U+9001, U+9006, U+9010, U+9014, U+901A, U+901F-9020, U+9023, U+9032, U+9045, U+904E, U+9054-9055, U+9069, U+9077-9078, U+907F, U+90E8, U+914D, U+91C8, U+91CD, U+91CF, U+91D1, U+91DD, U+9332, U+9375, U+9396, U+9577, U+9580, U+9589, U+958B, U+9593, U+95A2, U+95B2, U+95BE, U+9632, U+964D, U+9650, U+9664-9665, U+968E, U+9694, U+969B-969C, U+96A0, U+96A3, U+96C6, U+96E2, U+9732, U+9752, U+9759, U+975E, U+9762, U+97FF, U+9805-9806, U+9808, U+9818, U+982D, U+983B-983C, U+984D, U+985E, U+98DB, U+98DF, U+9A13, U+9AA8, U+9AD8, U+9ED9, U+FF01-FF9F, U+FFA1-FFBE, U+FFC2-FFC7, U+FFCA-FFCF, U+FFD2-FFD7, U+FFDA-FFDC, U+FFE0-FFE6, U+FFE8-FFEE;
 }
-/* 読解: 色・文字・寸法の共通基準。変数を介して各画面の見た目を揃える。 */:root {
+:root {
   color-scheme: dark;
   --bg: #10171d;
   --panel: #17232c;
@@ -26,7 +26,7 @@
   font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", "Noto Sans CJK JP", sans-serif;
   font-size: 14px;
 }
-/* 読解: 幅と余白の計算をborder-boxへ統一し、入力欄のはみ出しを抑える。 */* {
+* {
   box-sizing: border-box;
 }
 body {
@@ -34,7 +34,7 @@ body {
   background: var(--bg);
   color: var(--ink);
 }
-/* 読解: ヘッダーの情報階層と見出し。状態表示はDOM側で変更する。 */header {
+header {
   padding: 30px 4vw 26px;
   border-bottom: 1px solid var(--line);
   display: flex;
@@ -72,7 +72,7 @@ header p {
   margin: 0;
   color: var(--muted);
 }
-/* 読解: ナビと本文の全体配置。狭い画面の変更は末尾のmedia条件で上書きする。 */.layout {
+.layout {
   display: grid;
   grid-template-columns: 222px minmax(0, 1fr);
   max-width: 1500px;
@@ -82,7 +82,7 @@ aside {
   padding: 30px 18px;
   border-right: 1px solid var(--line);
 }
-/* 読解: タブナビの配置と選択状態。activeはJavaScriptから付け替える。 */nav {
+nav {
   display: grid;
   gap: 8px;
 }
@@ -121,7 +121,7 @@ main {
   padding: 30px clamp(16px, 3vw, 42px);
   min-width: 0;
 }
-/* 読解: セクション見出し・カード・入力グリッドの共通レイアウト。 */.section-head {
+.section-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -150,7 +150,7 @@ label,
   font-weight: 500;
   color: #c7d6dc;
 }
-/* 読解: 入力部品の基礎表示。型ごとの例外とfocus・invalid表示を後続で補う。 */input,
+input,
 select,
 textarea {
   width: 100%;
@@ -179,7 +179,7 @@ textarea {
   line-height: 1.6;
   font-family: ui-monospace, SFMono-Regular, Consolas, "Noto Sans JP", "Yu Gothic", "Noto Sans CJK JP", monospace;
 }
-/* 読解: キーボード操作時の焦点と不正入力を視覚化し、通常状態と区別する。 */input:focus,
+input:focus,
 select:focus,
 textarea:focus,
 button:focus-visible,
@@ -191,7 +191,7 @@ input:invalid,
 textarea:invalid {
   border-color: #da826c;
 }
-/* 読解: 操作ボタンの基本形とhover・disabled状態。実際の多重実行抑止はJavaScript側が担う。 */button {
+button {
   cursor: pointer;
   background: var(--panel2);
   border: 1px solid var(--line);
@@ -210,7 +210,7 @@ button:disabled {
   opacity: 0.45;
   cursor: wait;
 }
-/* 読解: 主操作・補助操作・危険操作の強調差を定義する。見た目だけで権限を変えない。 */.primary {
+.primary {
   background: var(--accent);
   color: #0f2923;
   font-weight: 700;
@@ -232,7 +232,7 @@ button:disabled {
 .danger {
   color: #ffa58e;
 }
-/* 読解: 操作列の折返しとコンパクト入力の幅をまとめ、画面幅に追従させる。 */.toolbar,
+.toolbar,
 .actionbar {
   display: flex;
   align-items: end;
@@ -273,13 +273,13 @@ button:disabled {
   padding: 5px 10px;
   white-space: nowrap;
 }
-/* 読解: 選択されたタブだけを表示する。非表示はデータ消去や処理停止を意味しない。 */.tab {
+.tab {
   display: none;
 }
 .tab.active {
   display: block;
 }
-/* 読解: ヘルプの操作点と浮動説明を表示する。マウス以外の焦点操作も併用する。 */.help {
+.help {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -315,7 +315,7 @@ button:disabled {
   overflow-wrap: anywhere;
   pointer-events: none;
 }
-/* 読解: 折畳み説明と項目編集カードの見出し・操作列を整える。 */details > summary {
+details > summary {
   cursor: pointer;
   color: #d6e5e9;
   font-weight: 600;
@@ -366,7 +366,7 @@ details[open] > summary {
   margin: 12px 0;
   font-size: 12px;
 }
-/* 読解: 接続プロファイル一覧と選択表示。選択クラスはクライアント状態から反映する。 */.profile-list {
+.profile-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
@@ -383,7 +383,7 @@ details[open] > summary {
   border-color: var(--accent);
   background: #203930;
 }
-/* 読解: JSONなど整形済み出力の空白を保ち、横長の内容をスクロール可能にする。 */pre {
+pre {
   font-size: 12px;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -398,7 +398,7 @@ details[open] > summary {
   font-size: 12px;
   tab-size: 2;
 }
-/* 読解: プレビュー表の横幅を制限せず、外側でスクロールを受け持つ。 */.table-scroll {
+.table-scroll {
   overflow: auto;
   max-height: 350px;
 }
@@ -421,7 +421,7 @@ th {
   color: var(--accent);
   font-size: 11px;
 }
-/* 読解: 通知に内容がある場合だけ枠を表示し、error状態では失敗色へ切り替える。 */#notice:not(:empty) {
+#notice:not(:empty) {
   border: 1px solid #527167;
   background: #1c352c;
   color: #b5f6dc;
@@ -436,7 +436,7 @@ th {
   background: #39291f;
   color: #ffbf9f;
 }
-/* 読解: 進捗バーと統計表示。表示用割合は実行結果の意味と区別する。 */.job-progress {
+.job-progress {
   height: 6px;
   background: #0b171d;
   border-radius: 6px;
@@ -463,7 +463,7 @@ th {
   font-size: 12px;
   line-height: 1.8;
 }
-/* 読解: 固定案内と認証情報状態の文字表現を整える。 */footer {
+footer {
   border-top: 1px solid var(--line);
   padding: 18px 4vw;
   color: var(--muted);
@@ -475,12 +475,12 @@ th {
 [hidden] {
   display: none !important;
 }
-/* 読解: 十分な横幅では編集項目を多列化する。基礎ルールの宣言を変更せず条件付きで上書きする。 */@media (min-width: 1100px) {
+@media (min-width: 1100px) {
   .grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-/* 読解: 狭い画面ではナビ・操作列・フォームを縦寄せにし、横溢れを抑える。 */@media (max-width: 760px) {
+@media (max-width: 760px) {
   header {
     padding: 20px;
   }
@@ -541,7 +541,7 @@ th {
   }
 }
 
-/* 読解: プリセット説明の改行を保ち、空欄や長文でもカード内で読めるようにする。 */#presetDetails {
+#presetDetails {
   white-space: pre-wrap;
   border-left: 2px solid var(--accent);
   padding: 10px 18px;

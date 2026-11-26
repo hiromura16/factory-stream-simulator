@@ -1,5 +1,6 @@
 {
   "additionalProperties": false,
+  "description": "保存する接続先の設定。接続・疎通確認は別の処理で行う。",
   "properties": {
     "id": {
       "pattern": "^[A-Za-z0-9_-]{1,64}$",

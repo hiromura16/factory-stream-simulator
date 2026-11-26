@@ -1,0 +1,1926 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIにひな型を頼む | ストリーム送信</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/help.css">
+  <script src="/static/help.js" defer></script>
+</head>
+<body class="help-page">
+  <a class="help-skip" href="#help-content">本文へ移動</a>
+  <div class="help-top">
+    <a class="help-home" href="/">ストリーム送信</a>
+    <a href="/">アプリに戻る</a>
+  </div>
+  <div class="help-layout">
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html" aria-current="page">AIにひな型を頼む</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
+    <main class="help-content" id="help-content">
+      <nav class="help-outline" aria-label="このページ"><a href="#0-人間向け-使い方">0. 人間向け：使い方</a><a href="#1-aiに渡す作成ル-ル">1. AIに渡す作成ルール</a><a href="#2-ツ-ルと形式の対応">2. ツールと形式の対応</a><a href="#3-共通-デ-タ項目-fields-の書き方-最重要">3. 共通：データ項目（`fields`）の書き方 ― 最重要</a><a href="#4-共通-異常ル-ル-anomalies">4. 共通：異常ルール（`anomalies`）</a><a href="#5-形式a-sql-ファイル-ストリ-ム">5. 形式A（SQL / ファイル / ストリーム）</a><a href="#6-形式b-設備-api-ヒストリアン-ログ-rfid">6. 形式B（設備 / API / ヒストリアン / ログ / RFID）</a><a href="#7-境界条件を確認する">7. 境界条件を確認する</a><a href="#8-検証のしかた">8. 検証のしかた</a><a href="#9-ツ-ル別の完成例">9. ツール別の完成例</a><a href="#10-依頼プロンプト-コピ-して-を埋める">10. 依頼プロンプト（コピーして【】を埋める）</a></nav>
+      <article><h1>AI向けテンプレート作成ハーネス</h1>
+<p>このファイルと末尾の依頼プロンプトをAIに渡し、<strong>ストリーム送信（<code>factory-stream-simulator</code>）</strong> の合成データのひな型を作ります。<a href="/help/settings.html">設定リファレンス</a>で使えるキーを調べ、作ったJSONはアプリの見本と少量の試験で確認します。<a href="/help/templates.html">自分でJSONを書く手順</a>も使えます。</p>
+<p>実データ、接続資格情報、非公開のホスト名をAIへの依頼や共有のひな型に含めないでください。</p>
+<hr />
+<h2 id="0-人間向け-使い方">0. 人間向け：使い方</h2>
+<ol>
+<li><strong>決めておくこと</strong>（AIに伝える内容）
+<ul>
+<li>どのツールで使うか（SQLに入れる / ファイルを置く / MQTT等で送る / 設備・API・ヒストリアン・ログ・RFIDとして読ませる）</li>
+<li>どんな業務データか（例：「プレス機6台の温度・回転数・状態」「ERPの製造指図」）</li>
+<li>件数・時間間隔・期間（例：「1分ごと、1日分」「200件」）</li>
+<li>入れたい異常（例：「途中で温度が急上昇」「10%欠測」「同じ伝票番号の重複」）</li>
+<li>SQLなら投入先テーブル名と書き込み方法（insert / upsert …）</li>
+</ul>
+</li>
+<li>AIに <strong>このファイル＋§10のプロンプト</strong> を渡す。</li>
+<li>AIが返したJSONをファイル（例 <code>my-template.json</code>）に保存。</li>
+<li>アプリ画面の「プリセット / JSON」（Family B は「設定の保存・JSON」）に貼り付け →「JSONを画面に適用」→「見本を見る」。
+<ul>
+<li>またはコマンドで検証（§8）。エラーが出たら、<strong>エラー文をそのままAIに貼って「直して」と頼む</strong>（§8.3 の表をAIが参照します）。</li>
+</ul>
+</li>
+<li>問題なければ「ひな型として保存」。</li>
+</ol>
+<hr />
+<h2 id="1-aiに渡す作成ル-ル">1. AIに渡す作成ルール</h2>
+<p>AIはテンプレートを出力する前に、次をすべて守ること。</p>
+<ol>
+<li><strong>JSON本体は1つのコードブロック</strong>に入れ、説明はブロック外に書く。JSON内にコメント（<code>//</code>、<code>/* */</code>）や末尾カンマを書かない。</li>
+<li><strong>未知のキーは1つも書かない</strong>（全モデルが <code>extra=&quot;forbid&quot;</code>。<code>&quot;min&quot;</code>、<code>&quot;max&quot;</code> など未定義のキーはエラー）。用途は <code>name</code> と <code>description</code>、編集用の注記は <code>_comment</code> に書く。必要なら <code>$schema</code> で対象の契約を指定する。</li>
+<li><strong>最小構成で書く</strong>。使わないセクション（Family A の <code>files</code> / <code>stream</code>、Family B の不要セクション）は<strong>省略</strong>する。省略すると既定値が入る。別の環境では接続先IDと版を選び直す（§5.6）。</li>
+<li>項目名（<code>fields[].name</code>）は <strong>英字または <code>_</code> で始まる英数字・<code>_</code> のみ、63文字まで</strong>。日本語・ハイフン・空白は不可。大文字小文字違いの重複も不可。</li>
+<li><strong><code>fields</code> は上から順に生成される</strong>。他の項目を参照する項目（template / reference / sum / difference / product / ratio / condition）は、参照先より<strong>下</strong>に置く。</li>
+<li>各項目に <strong><code>data_type</code> を必ず明示</strong>する（取り込み先が必要とする型を伝える）。</li>
+<li>日時は <strong>タイムゾーン付きISO 8601</strong>（例 <code>2026-12-01T08:00:00+09:00</code>）。出力は UTC（<code>+00:00</code>）に変換される。</li>
+<li>共有値は <code>parameters</code> に置き、数値・選択肢・日時の欄では <code>&quot;$名前&quot;</code> で参照できる（文字列全体が <code>$名前</code> の場合のみ）。テンプレート文字列内では <code>{名前}</code> で参照する。</li>
+<li>§7 の境界条件を確認する。</li>
+<li>出力後に §8.2 の自己チェックリストを1項目ずつ確認し、結果を短く報告する。</li>
+</ol>
+<hr />
+<h2 id="2-ツ-ルと形式の対応">2. ツールと形式の対応</h2>
+<table>
+<thead>
+<tr>
+<th>ツール（リポジトリ）</th>
+<th>用途</th>
+<th>形式</th>
+<th>トップの形</th>
+<th>使うセクション</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>factory-sql-data-loader</td>
+<td>DBへ投入（SQL Server/Oracle/PostgreSQL/MySQL/MariaDB/SQLite）</td>
+<td><strong>A</strong></td>
+<td>RunSpec（<code>version: 2</code>）</td>
+<td><code>fields</code>, <code>parameters</code>, <code>anomalies</code>, <code>faults</code>, <strong><code>sql</code></strong></td>
+</tr>
+<tr>
+<td>factory-file-generator</td>
+<td>ファイル出力（JSON/CSV/画像/XLSX/XML/Parquet/Avro/PDF）</td>
+<td><strong>A</strong></td>
+<td>RunSpec（<code>version: 2</code>）</td>
+<td><code>fields</code>, <code>parameters</code>, <code>anomalies</code>, <code>faults</code>, <strong><code>files</code></strong></td>
+</tr>
+<tr>
+<td>factory-stream-simulator</td>
+<td>送信（MQTT/Kafka/AMQP/NATS/WebSocket/HTTP）</td>
+<td><strong>A</strong></td>
+<td>RunSpec（<code>version: 2</code>）</td>
+<td><code>fields</code>, <code>parameters</code>, <code>anomalies</code>, <code>faults</code>, <strong><code>stream</code></strong></td>
+</tr>
+<tr>
+<td>factory-equipment-simulator</td>
+<td>設備として読まれる（OPC UA / Modbus TCP）</td>
+<td><strong>B</strong></td>
+<td>Spec（<code>version: 1</code>）</td>
+<td><code>generator</code>, <strong><code>equipment</code></strong></td>
+</tr>
+<tr>
+<td>factory-api-simulator</td>
+<td>業務APIとして取得される（REST / OData）</td>
+<td><strong>B</strong></td>
+<td>Spec（<code>version: 1</code>）</td>
+<td><code>generator</code>, <strong><code>business</code></strong></td>
+</tr>
+<tr>
+<td>factory-historian-simulator</td>
+<td>履歴DBとして取得される（期間・集計）</td>
+<td><strong>B</strong></td>
+<td>Spec（<code>version: 1</code>）</td>
+<td><code>generator</code>, <strong><code>history</code></strong></td>
+</tr>
+<tr>
+<td>factory-log-simulator</td>
+<td>ログを出力（ファイル / Syslog）</td>
+<td><strong>B</strong></td>
+<td>Spec（<code>version: 1</code>）</td>
+<td><code>generator</code>, <code>batch_size</code>, <strong><code>logs</code></strong></td>
+</tr>
+<tr>
+<td>factory-identification-simulator</td>
+<td>RFID・バーコード・作業者イベント</td>
+<td><strong>B</strong></td>
+<td>Spec（<code>version: 1</code>）</td>
+<td><code>generator</code>, <code>batch_size</code>, <strong><code>identification</code></strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>形式A</strong>：<code>fields</code> などがトップレベルにある。</li>
+<li><strong>形式B</strong>：トップに周期などの設定があり、データ項目は <code>generator</code> の中（中身は形式Aと同じ書き方）。</li>
+<li>接続先・認証・送信先は <strong>テンプレートに含めない</strong>（画面の「接続先」「公開・出力設定」で別管理。テンプレートは <code>connection_id</code> / <code>profile_id</code> で参照するだけ。既定は <code>&quot;default&quot;</code>）。</li>
+</ul>
+<hr />
+<h2 id="3-共通-デ-タ項目-fields-の書き方-最重要">3. 共通：データ項目（<code>fields</code>）の書き方 ― 最重要</h2>
+<p><code>fields</code> は1〜100個。各項目は次のキーを持てる（<strong>ここに無いキーはエラー</strong>）。</p>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>型・範囲</th>
+<th>既定</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>英字/<code>_</code>始まり英数字<code>_</code>、≤63</td>
+<td>必須</td>
+<td>列名・JSONキー・CSVヘッダー</td>
+</tr>
+<tr>
+<td><code>data_type</code></td>
+<td><code>string</code> <code>integer</code> <code>number</code> <code>decimal</code> <code>boolean</code> <code>datetime</code> <code>json</code></td>
+<td><code>string</code></td>
+<td>出力の型。<strong>必ず明示</strong></td>
+</tr>
+<tr>
+<td><code>generator</code></td>
+<td>§3.1 の16種</td>
+<td><code>constant</code></td>
+<td>値の作り方</td>
+</tr>
+<tr>
+<td><code>primary_key</code></td>
+<td>bool</td>
+<td>false</td>
+<td>主キー（SQLのupsert/update/deleteで必須。NULL不可）</td>
+</tr>
+<tr>
+<td><code>length</code></td>
+<td>1〜4000</td>
+<td>255</td>
+<td>string の最大文字数（超えるとエラー。SQLの列長にもなる）</td>
+</tr>
+<tr>
+<td><code>precision</code></td>
+<td>1〜38</td>
+<td>18</td>
+<td>decimal の全桁数</td>
+</tr>
+<tr>
+<td><code>scale</code></td>
+<td>0〜18（≤precision）</td>
+<td>3</td>
+<td>decimal の小数桁。<strong>number は この桁数に丸められる</strong></td>
+</tr>
+<tr>
+<td><code>minimum</code> / <code>maximum</code></td>
+<td>数値 or <code>&quot;$param&quot;</code></td>
+<td>0 / 100</td>
+<td>integer・uniform の範囲（integerは両端含む）</td>
+</tr>
+<tr>
+<td><code>mean</code> / <code>stddev</code></td>
+<td>数値 or <code>&quot;$param&quot;</code></td>
+<td>50 / 5</td>
+<td>normal の平均・標準偏差（stddev≥0）</td>
+</tr>
+<tr>
+<td><code>start</code></td>
+<td>数値 / ISO日時 / <code>&quot;$param&quot;</code></td>
+<td>0</td>
+<td>sequence の開始値、timestamp の開始日時</td>
+</tr>
+<tr>
+<td><code>step</code></td>
+<td>数値 or <code>&quot;$param&quot;</code></td>
+<td>1</td>
+<td>sequence の増分、timestamp の秒間隔（小数・負も可）</td>
+</tr>
+<tr>
+<td><code>group_size</code></td>
+<td>整数≥1 or <code>&quot;$param&quot;</code></td>
+<td>1</td>
+<td>何件ごとに sequence / timestamp を1つ進めるか</td>
+</tr>
+<tr>
+<td><code>modulo</code></td>
+<td>整数≥0 or <code>&quot;$param&quot;</code></td>
+<td>0</td>
+<td>0以外なら sequence / timestamp の進みを周期化（0〜modulo-1 を繰り返す）</td>
+</tr>
+<tr>
+<td><code>probability</code></td>
+<td>0〜1 or <code>&quot;$param&quot;</code></td>
+<td>0.5</td>
+<td>boolean が true になる確率</td>
+</tr>
+<tr>
+<td><code>choices</code></td>
+<td>配列 or <code>&quot;$param&quot;</code></td>
+<td>[]</td>
+<td>choice の候補（文字列・数値・真偽・オブジェクト可）</td>
+</tr>
+<tr>
+<td><code>weights</code></td>
+<td>数値配列（<strong><code>$param</code> 不可</strong>）</td>
+<td>[]</td>
+<td>choice の重み。choices と同じ長さ。空なら均等</td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td>任意 or <code>&quot;$param&quot;</code></td>
+<td>null</td>
+<td>constant の値</td>
+</tr>
+<tr>
+<td><code>template</code></td>
+<td>文字列 ≤2048</td>
+<td><code>&quot;{sequence}&quot;</code></td>
+<td>template の書式（§3.3）</td>
+</tr>
+<tr>
+<td><code>sources</code></td>
+<td>項目名の配列 ≤32</td>
+<td>[]</td>
+<td>reference / sum / difference / product / ratio の参照元（先に定義された項目）</td>
+</tr>
+<tr>
+<td><code>null_probability</code></td>
+<td>0〜1</td>
+<td>0</td>
+<td>この確率で NULL にする（主キーには指定不可）</td>
+</tr>
+<tr>
+<td><code>condition</code></td>
+<td>オブジェクト or null</td>
+<td>null</td>
+<td>条件による値の上書き（§3.4）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="3-1-生成器-generator-早見表">3.1 生成器（<code>generator</code>）早見表</h3>
+<table>
+<thead>
+<tr>
+<th>generator</th>
+<th>使うキー</th>
+<th>推奨 data_type</th>
+<th>出力例</th>
+<th>注意</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>record_id</code></td>
+<td>なし</td>
+<td>string（length≥32）</td>
+<td><code>&quot;2f2b3035516eda05dad9f4403a410d7b&quot;</code></td>
+<td><code>run_key</code>+<code>seed</code>+通番から決まる32桁16進。<strong>ツールをまたいでも同じ条件なら同じ値</strong>（突合キーに使える）</td>
+</tr>
+<tr>
+<td><code>uuid</code></td>
+<td>なし</td>
+<td>string（length≥36）</td>
+<td><code>&quot;696261e0-aaf5-5f73-...&quot;</code></td>
+<td>決定的なUUID v5</td>
+</tr>
+<tr>
+<td><code>sequence</code></td>
+<td>start, step, group_size, modulo</td>
+<td><strong>integer</strong>（小数なら number）</td>
+<td><code>0, 1, 2…</code></td>
+<td>型を明示して入力先と揃える</td>
+</tr>
+<tr>
+<td><code>integer</code></td>
+<td>minimum, maximum</td>
+<td>integer</td>
+<td><code>37</code></td>
+<td>両端含む</td>
+</tr>
+<tr>
+<td><code>uniform</code></td>
+<td>minimum, maximum</td>
+<td>number / decimal</td>
+<td><code>11.25</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>normal</code></td>
+<td>mean, stddev</td>
+<td>number / decimal</td>
+<td><code>66.6</code></td>
+<td><strong>integer にすると「整数ではありません」エラー</strong></td>
+</tr>
+<tr>
+<td><code>choice</code></td>
+<td>choices, weights</td>
+<td>候補の型に合わせる</td>
+<td><code>&quot;RUN&quot;</code></td>
+<td>weights は数値配列のみ</td>
+</tr>
+<tr>
+<td><code>boolean</code></td>
+<td>probability</td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>constant</code></td>
+<td>value</td>
+<td>値の型に合わせる</td>
+<td><code>&quot;125.50&quot;</code></td>
+<td>value 省略で常に null</td>
+</tr>
+<tr>
+<td><code>template</code></td>
+<td>template</td>
+<td>string</td>
+<td><code>&quot;EQ-009&quot;</code></td>
+<td>§3.3</td>
+</tr>
+<tr>
+<td><code>timestamp</code></td>
+<td>start, step, group_size, modulo</td>
+<td><strong>datetime</strong></td>
+<td><code>&quot;2026-11-30T23:00:00+00:00&quot;</code></td>
+<td>start にタイムゾーン必須。出力はUTC</td>
+</tr>
+<tr>
+<td><code>reference</code></td>
+<td>sources（1つ）</td>
+<td>参照元と同じ</td>
+<td></td>
+<td>先行項目の値をコピー</td>
+</tr>
+<tr>
+<td><code>sum</code></td>
+<td>sources（1つ以上）</td>
+<td>number / integer / decimal</td>
+<td></td>
+<td>合計</td>
+</tr>
+<tr>
+<td><code>difference</code></td>
+<td>sources（2つ以上）</td>
+<td>同上</td>
+<td></td>
+<td>1つ目 − 残りの合計</td>
+</tr>
+<tr>
+<td><code>product</code></td>
+<td>sources</td>
+<td>同上</td>
+<td></td>
+<td>積</td>
+</tr>
+<tr>
+<td><code>ratio</code></td>
+<td>sources（<strong>ちょうど2つ</strong>）</td>
+<td>number / decimal</td>
+<td><code>0.9468</code></td>
+<td>分母が0だとエラー → 分母の最小値を1以上に</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>integer 型で受けられるのは結果が整数のときだけ（例：<code>difference</code> の結果 <code>89.0</code> は OK、<code>ratio</code> は通常NG）。</li>
+<li>decimal は精度を保つ<strong>文字列</strong>で出力される（例 <code>&quot;125.50&quot;</code>）。SQLでは NUMERIC(precision, scale)。</li>
+<li>number は <code>scale</code>（既定3）桁に丸められる。小数4桁以上が必要なら <code>scale</code> を指定。</li>
+</ul>
+<h3 id="3-2-共有パラメ-タ-parameters">3.2 共有パラメーター（<code>parameters</code>）</h3>
+<pre><code class="language-json">&quot;parameters&quot;: {&quot;equipment_count&quot;: 10, &quot;lines&quot;: [&quot;L1&quot;,&quot;L2&quot;,&quot;L3&quot;], &quot;start_time&quot;: &quot;2026-12-01T08:00:00+09:00&quot;}
+</code></pre>
+<ul>
+<li>最大100キー。値は任意のJSON（数値・文字列・配列・オブジェクト）。</li>
+<li>参照方法：
+<ul>
+<li>数値・日時・選択肢・値の欄 → <code>&quot;maximum&quot;: &quot;$equipment_count&quot;</code>、<code>&quot;choices&quot;: &quot;$lines&quot;</code>、<code>&quot;start&quot;: &quot;$start_time&quot;</code>（<strong>文字列全体が <code>$名前</code></strong> のときだけ参照になる。<code>&quot;L-$x&quot;</code> のような埋め込みは不可）</li>
+<li>template の中 → <code>&quot;{equipment_count}&quot;</code></li>
+<li>JSON構造テンプレートの中 → <code>&quot;$parameters.lines&quot;</code></li>
+</ul>
+</li>
+<li>未定義の <code>$名前</code> は「パラメーター ○○ が定義されていません」エラー。</li>
+<li><code>parameters</code> を省略すると既定値（<code>entity_count</code>, <code>statuses</code>, <code>value_mean</code>, <code>value_stddev</code>, <code>start_time</code>）が入る。自分の項目で使わないなら無害。</li>
+</ul>
+<h3 id="3-3-文字列テンプレ-ト-generator-template-ファイル名-トピック-ログ本文">3.3 文字列テンプレート（<code>generator: &quot;template&quot;</code>、ファイル名・トピック・ログ本文）</h3>
+<ul>
+<li>参照できる名前：<strong>それより上に定義した項目</strong>、<code>parameters</code> のキー、<code>sequence</code>（通番）、<code>record_id</code>。</li>
+<li>書式指定は <strong>短い数値書式だけ</strong>：<code>{no:05d}</code>（ゼロ埋め整数）、<code>{v:.2f}</code>（小数2桁）、<code>{s}</code>。<code>,</code> <code>x</code> <code>&gt;</code> <code>!r</code> <code>.attr</code> <code>[0]</code> などは不可。</li>
+<li><strong><code>:d</code> を使う項目は <code>data_type: &quot;integer&quot;</code> にする</strong>（string や number だと「生成ルールの型・範囲・日時を確認してください」エラー）。</li>
+<li><strong><code>:.2f</code> は number / integer 項目にのみ</strong>。decimal は文字列なので <code>:.2f</code> 不可。</li>
+<li>datetime 項目を埋め込むと UTC の ISO 文字列になる。</li>
+<li><code>{</code> <code>}</code> を文字として出したい場合はテンプレートで扱えないので、constant を使う。</li>
+</ul>
+<h3 id="3-4-条件による上書き-condition">3.4 条件による上書き（<code>condition</code>）</h3>
+<pre><code class="language-json">{&quot;name&quot;:&quot;stop_reason&quot;,&quot;data_type&quot;:&quot;string&quot;,&quot;generator&quot;:&quot;constant&quot;,&quot;value&quot;:null,
+ &quot;condition&quot;:{&quot;field&quot;:&quot;status&quot;,&quot;operator&quot;:&quot;eq&quot;,&quot;value&quot;:&quot;STOP&quot;,&quot;then_value&quot;:&quot;MAINTENANCE&quot;}}
+</code></pre>
+<ul>
+<li><code>field</code>：<strong>それより上の項目</strong>。<code>operator</code>：<code>eq</code> <code>ne</code> <code>gt</code> <code>ge</code> <code>lt</code> <code>le</code> <code>in</code>。<code>value</code> / <code>then_value</code> は <code>&quot;$param&quot;</code> 可。</li>
+<li><code>in</code> の <code>value</code> は <strong>配列</strong>にする（例 <code>[&quot;STOP&quot;,&quot;ALARM&quot;]</code>）。</li>
+<li>評価順：生成 → 条件 → <code>null_probability</code> → 型チェック。</li>
+<li><strong><code>gt/ge/lt/le</code> で比較する項目に <code>null_probability</code> を付けない</strong>（§7）。</li>
+</ul>
+<h3 id="3-5-書き方の型-コピ-用スニペット">3.5 書き方の型（コピー用スニペット）</h3>
+<pre><code class="language-json">{&quot;name&quot;:&quot;id&quot;,&quot;data_type&quot;:&quot;string&quot;,&quot;generator&quot;:&quot;record_id&quot;,&quot;primary_key&quot;:true,&quot;length&quot;:64}
+{&quot;name&quot;:&quot;seq_no&quot;,&quot;data_type&quot;:&quot;integer&quot;,&quot;generator&quot;:&quot;sequence&quot;,&quot;start&quot;:1}
+{&quot;name&quot;:&quot;machine_no&quot;,&quot;data_type&quot;:&quot;integer&quot;,&quot;generator&quot;:&quot;integer&quot;,&quot;minimum&quot;:1,&quot;maximum&quot;:5}
+{&quot;name&quot;:&quot;machine_id&quot;,&quot;data_type&quot;:&quot;string&quot;,&quot;generator&quot;:&quot;template&quot;,&quot;template&quot;:&quot;M-{machine_no:02d}&quot;,&quot;length&quot;:8}
+{&quot;name&quot;:&quot;status&quot;,&quot;data_type&quot;:&quot;string&quot;,&quot;generator&quot;:&quot;choice&quot;,&quot;choices&quot;:[&quot;RUN&quot;,&quot;IDLE&quot;,&quot;STOP&quot;],&quot;weights&quot;:[90,8,2],&quot;length&quot;:8}
+{&quot;name&quot;:&quot;temperature&quot;,&quot;data_type&quot;:&quot;number&quot;,&quot;generator&quot;:&quot;normal&quot;,&quot;mean&quot;:65,&quot;stddev&quot;:2.5,&quot;scale&quot;:1}
+{&quot;name&quot;:&quot;price&quot;,&quot;data_type&quot;:&quot;decimal&quot;,&quot;generator&quot;:&quot;uniform&quot;,&quot;minimum&quot;:100,&quot;maximum&quot;:200,&quot;precision&quot;:12,&quot;scale&quot;:2}
+{&quot;name&quot;:&quot;is_defect&quot;,&quot;data_type&quot;:&quot;boolean&quot;,&quot;generator&quot;:&quot;boolean&quot;,&quot;probability&quot;:0.03}
+{&quot;name&quot;:&quot;good_qty&quot;,&quot;data_type&quot;:&quot;integer&quot;,&quot;generator&quot;:&quot;difference&quot;,&quot;sources&quot;:[&quot;output_qty&quot;,&quot;reject_qty&quot;]}
+{&quot;name&quot;:&quot;event_time&quot;,&quot;data_type&quot;:&quot;datetime&quot;,&quot;generator&quot;:&quot;timestamp&quot;,&quot;start&quot;:&quot;2026-12-01T08:00:00+09:00&quot;,&quot;step&quot;:60}
+{&quot;name&quot;:&quot;attrs&quot;,&quot;data_type&quot;:&quot;json&quot;,&quot;generator&quot;:&quot;constant&quot;,&quot;value&quot;:{&quot;vendor&quot;:&quot;ACME&quot;,&quot;rev&quot;:2}}
+</code></pre>
+<hr />
+<h2 id="4-共通-異常ル-ル-anomalies">4. 共通：異常ルール（<code>anomalies</code>）</h2>
+<p>正常値を作った<strong>後</strong>に、上から順に適用される（最大64個）。</p>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>型</th>
+<th>既定</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>1〜120文字</td>
+<td><code>&quot;異常注入&quot;</code></td>
+<td>表示名（画面・履歴に出る）</td>
+</tr>
+<tr>
+<td><code>enabled</code></td>
+<td>bool</td>
+<td>true</td>
+<td></td>
+</tr>
+<tr>
+<td><code>field</code></td>
+<td>項目名</td>
+<td>必須</td>
+<td>対象項目（定義済みであること）</td>
+</tr>
+<tr>
+<td><code>operation</code></td>
+<td>下表</td>
+<td><code>set</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td>任意 / <code>&quot;$param&quot;</code></td>
+<td>null</td>
+<td>操作ごとの値</td>
+</tr>
+<tr>
+<td><code>from_row</code></td>
+<td>0以上</td>
+<td>0</td>
+<td>開始位置（<strong>0始まり、実行内の位置</strong>）</td>
+</tr>
+<tr>
+<td><code>to_row</code></td>
+<td>null or ≥from_row</td>
+<td>null</td>
+<td>終了位置（含む）。null は最後まで</td>
+</tr>
+<tr>
+<td><code>every</code></td>
+<td>≥1</td>
+<td>1</td>
+<td>何件おきに適用</td>
+</tr>
+<tr>
+<td><code>probability</code></td>
+<td>0〜1</td>
+<td>1</td>
+<td>適用確率（seedで再現）</td>
+</tr>
+<tr>
+<td><code>when</code></td>
+<td><code>{field, operator, value}</code> or null</td>
+<td>null</td>
+<td>生成済みの行に対する条件</td>
+</tr>
+<tr>
+<td><code>bypass_validation</code></td>
+<td>bool</td>
+<td>false</td>
+<td>true にすると型チェックを迂回（数値欄に文字列を入れる等）</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>operation</th>
+<th>value</th>
+<th>効果</th>
+<th>使ってよい項目</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>set</code></td>
+<td>置換値</td>
+<td>値を置き換え</td>
+<td>何でも（型が合わない値は <code>bypass_validation: true</code>）</td>
+</tr>
+<tr>
+<td><code>add</code></td>
+<td>増分</td>
+<td>加算</td>
+<td><strong>数値項目、かつ NULL にならない項目のみ</strong></td>
+</tr>
+<tr>
+<td><code>multiply</code></td>
+<td>倍率</td>
+<td>乗算（単位違い×1000など）</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>ramp</code></td>
+<td>1件あたり増分</td>
+<td>from_row から徐々に増える（ドリフト）</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>freeze</code></td>
+<td>不要</td>
+<td>from_row の値に固着</td>
+<td>何でも</td>
+</tr>
+<tr>
+<td><code>null</code></td>
+<td>不要</td>
+<td>NULL にする</td>
+<td>主キー以外</td>
+</tr>
+<tr>
+<td><code>copy_from</code></td>
+<td><strong>コピー元位置（整数、必須）</strong></td>
+<td>指定位置の値をコピー（重複伝票など）</td>
+<td>何でも</td>
+</tr>
+<tr>
+<td><code>timestamp_shift</code></td>
+<td>秒（負も可）</td>
+<td>時刻をずらす（遅延・未来時刻）</td>
+<td>datetime 項目</td>
+</tr>
+<tr>
+<td><code>omit</code></td>
+<td>不要</td>
+<td>項目そのものを消す（キー欠落）</td>
+<td>主キー以外</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>「位置」は形式Aでは<strong>実行内のレコード番号</strong>。形式Bでは <strong>tick 番号ではなくレコード通番</strong>（設備・ヒストリアンは1tickで台数分進む。例：設備6台なら from_row 120 ≒ 20tick目。ログ・RFIDは1tickで <code>batch_size</code> 件進む）。</li>
+<li>異常の「正解ラベル」はデータに混ぜず、<code>description</code> に「何件目〜何件目に何を入れたか」を書いておく。</li>
+</ul>
+<h3 id="4-1-処理障害-faults-形式aのみ">4.1 処理障害（<code>faults</code>・形式Aのみ）</h3>
+<p>データではなく処理そのものを止める・遅らせる設定。<strong>意図的に failed で終わる</strong>ことがある。</p>
+<pre><code class="language-json">&quot;faults&quot;: {&quot;enabled&quot;: true, &quot;stage&quot;: &quot;before_batch&quot;, &quot;action&quot;: &quot;fail&quot;, &quot;from_batch&quot;: 2, &quot;every_batches&quot;: 1, &quot;max_occurrences&quot;: 1, &quot;delay_ms&quot;: 1000, &quot;artifact_mode&quot;: &quot;none&quot;}
+</code></pre>
+<ul>
+<li><code>stage</code>: <code>before_batch</code> / <code>after_write</code>、<code>action</code>: <code>none</code> / <code>fail</code> / <code>delay</code>、<code>from_batch</code> は<strong>1始まり</strong>。</li>
+<li><code>artifact_mode</code>（壊れたファイルを作る）は <strong>file-generator 専用</strong>：<code>truncate_json</code> <code>invalid_json_utf8</code> <code>csv_header_mismatch</code> <code>truncate_image</code> <code>wrong_image_extension</code> <code>manifest_checksum_mismatch</code>。他ツールで指定するとエラー。</li>
+<li>形式B（設備〜RFID）では <code>generator.faults</code> は<strong>無視される</strong>。各セクションの専用異常（<code>business.fault</code>、<code>equipment.offline_from_tick</code> 等）を使う。</li>
+</ul>
+<hr />
+<h2 id="5-形式a-sql-ファイル-ストリ-ム">5. 形式A（SQL / ファイル / ストリーム）</h2>
+<h3 id="5-1-トップレベル">5.1 トップレベル</h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>範囲</th>
+<th>既定</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>version</code></td>
+<td>2</td>
+<td>2</td>
+<td>省略可</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>1〜120文字</td>
+<td><code>&quot;カスタムデータ&quot;</code></td>
+<td>表示名</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>≤1000文字</td>
+<td><code>&quot;&quot;</code></td>
+<td>想定・異常の正解・確認事項（<code>\n</code> で改行）</td>
+</tr>
+<tr>
+<td><code>connection_id</code></td>
+<td><code>[A-Za-z0-9_-]{1,64}</code></td>
+<td><code>&quot;default&quot;</code></td>
+<td>接続先ID（画面で登録したもの）</td>
+</tr>
+<tr>
+<td><code>connection_revision</code></td>
+<td>null</td>
+<td>null</td>
+<td><strong>null のままにする</strong></td>
+</tr>
+<tr>
+<td><code>run_key</code></td>
+<td><code>[A-Za-z0-9_-]{1,64}</code></td>
+<td><code>&quot;trial-001&quot;</code></td>
+<td>系列名。record_id の元。<strong>同じ run_key+seed なら同じデータ</strong></td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td>0〜2147483647</td>
+<td>42</td>
+<td>乱数シード</td>
+</tr>
+<tr>
+<td><code>rows</code></td>
+<td>1〜100,000,000</td>
+<td>30</td>
+<td>件数</td>
+</tr>
+<tr>
+<td><code>target_rate</code></td>
+<td>0〜1,000,000</td>
+<td>10</td>
+<td>1秒あたり件数（0=制限なし）</td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>1〜10000</td>
+<td>1000</td>
+<td>まとめて書く件数（SQLのCOMMIT単位など）</td>
+</tr>
+<tr>
+<td><code>start_sequence</code></td>
+<td>0〜</td>
+<td>0</td>
+<td>通番の開始（続きから作る時）</td>
+</tr>
+<tr>
+<td><code>max_duration_seconds</code></td>
+<td>1〜86400</td>
+<td>3600</td>
+<td>時間上限</td>
+</tr>
+<tr>
+<td><code>max_output_mb</code></td>
+<td>1〜</td>
+<td>1024</td>
+<td>容量上限</td>
+</tr>
+<tr>
+<td><code>initial_delay_seconds</code></td>
+<td>0〜3600</td>
+<td>0</td>
+<td>開始待ち</td>
+</tr>
+<tr>
+<td><code>jitter_ms</code></td>
+<td>0〜60000</td>
+<td>0</td>
+<td>送信間隔のゆらぎ</td>
+</tr>
+<tr>
+<td><code>burst_rows</code> / <code>burst_pause_ms</code></td>
+<td></td>
+<td>0 / 0</td>
+<td>N件ごとにM ms休む</td>
+</tr>
+<tr>
+<td><code>parameters</code></td>
+<td>≤100キー</td>
+<td>既定あり</td>
+<td>§3.2</td>
+</tr>
+<tr>
+<td><code>fields</code></td>
+<td>1〜100</td>
+<td>既定7項目</td>
+<td>§3</td>
+</tr>
+<tr>
+<td><code>anomalies</code></td>
+<td>≤64</td>
+<td>[]</td>
+<td>§4</td>
+</tr>
+<tr>
+<td><code>faults</code></td>
+<td></td>
+<td>無効</td>
+<td>§4.1</td>
+</tr>
+<tr>
+<td><code>sql</code> / <code>files</code> / <code>stream</code></td>
+<td></td>
+<td>既定あり</td>
+<td><strong>使うツールのものだけ書く</strong></td>
+</tr>
+<tr>
+<td><code>task</code></td>
+<td><code>&quot;generate&quot;</code></td>
+<td></td>
+<td>省略可（<code>retry</code> は書かない）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="5-2-sql-factory-sql-data-loader">5.2 <code>sql</code>（factory-sql-data-loader）</h3>
+<pre><code class="language-json">&quot;sql&quot;: {&quot;schema_name&quot;: &quot;&quot;, &quot;table&quot;: &quot;equipment_results&quot;, &quot;operation&quot;: &quot;insert&quot;}
+</code></pre>
+<ul>
+<li><code>table</code> / <code>schema_name</code>：英字/<code>_</code>始まり英数字<code>_</code>。MySQL・MariaDB・SQLite は <code>schema_name</code> を空にする。</li>
+<li><code>operation</code>：<code>insert</code>（追加のみ）/ <code>upsert</code>（あれば更新）/ <code>update</code>（既存のみ更新）/ <code>delete</code>。<strong>upsert/update/delete は <code>primary_key: true</code> の項目が必要</strong>で、DB側の主キーと一致していること。</li>
+<li>テーブルが無い場合は画面の「未作成のテーブルを作成」で作る（作らないと <code>NoSuchTableError</code> で失敗）。</li>
+<li>画面から作るテーブルの列型：string→NVARCHAR系(length)、integer→BIGINT、number→FLOAT（OracleはBINARY_DOUBLE）、decimal→NUMERIC(precision,scale)、boolean→BOOLEAN相当、datetime→DATETIME系（<strong>タイムゾーンなし</strong>、SQL ServerはDATETIME2。値はUTCで入る）、json→長いテキスト列（既存テーブルにJSON型の列があればJSONとして書く）。</li>
+</ul>
+<h3 id="5-3-files-factory-file-generator">5.3 <code>files</code>（factory-file-generator）</h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>値</th>
+<th>既定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>formats</code></td>
+<td><code>json</code> <code>csv</code> <code>image</code> <code>xlsx</code> <code>xml</code> <code>parquet</code> <code>avro</code> <code>pdf</code> の配列（1〜8個）</td>
+<td><code>[&quot;json&quot;,&quot;csv&quot;,&quot;image&quot;]</code></td>
+</tr>
+<tr>
+<td><code>records_per_file</code></td>
+<td>1〜10000</td>
+<td>100</td>
+</tr>
+<tr>
+<td><code>path_template</code></td>
+<td>フォルダ。<code>{run_key}</code> <code>{job_id}</code> と parameters を参照可</td>
+<td><code>&quot;{run_key}/{job_id}&quot;</code></td>
+</tr>
+<tr>
+<td><code>filename_template</code></td>
+<td>ファイル名（拡張子なし）。<code>{sequence:010d}</code> <code>{record_id}</code> <code>{run_key}</code> <code>{job_id}</code>、先頭レコードの項目・parameters</td>
+<td><code>&quot;{sequence:010d}-{record_id}&quot;</code></td>
+</tr>
+<tr>
+<td><code>json_mode</code></td>
+<td><code>array</code> / <code>object</code>（1件1ファイル） / <code>jsonl</code></td>
+<td><code>array</code></td>
+</tr>
+<tr>
+<td><code>json_pretty</code></td>
+<td>bool</td>
+<td>false</td>
+</tr>
+<tr>
+<td><code>json_template</code></td>
+<td>§5.5 の構造テンプレート or null</td>
+<td>null</td>
+</tr>
+<tr>
+<td><code>compression</code></td>
+<td><code>none</code> / <code>gzip</code></td>
+<td><code>none</code></td>
+</tr>
+<tr>
+<td><code>csv_delimiter</code> / <code>csv_quotechar</code></td>
+<td>1文字</td>
+<td><code>,</code> / <code>&quot;</code></td>
+</tr>
+<tr>
+<td><code>csv_quoting</code></td>
+<td><code>minimal</code> <code>all</code> <code>nonnumeric</code></td>
+<td><code>minimal</code></td>
+</tr>
+<tr>
+<td><code>csv_header</code></td>
+<td>bool</td>
+<td>true</td>
+</tr>
+<tr>
+<td><code>csv_null_value</code></td>
+<td>NULLの表記</td>
+<td><code>&quot;&quot;</code></td>
+</tr>
+<tr>
+<td><code>csv_newline</code></td>
+<td><code>LF</code> / <code>CRLF</code></td>
+<td><code>LF</code></td>
+</tr>
+<tr>
+<td><code>csv_encoding</code></td>
+<td><code>utf-8</code> / <code>utf-8-sig</code>（BOM付き、Excel向け）</td>
+<td><code>utf-8-sig</code></td>
+</tr>
+<tr>
+<td><code>write_sidecars</code></td>
+<td>画像の付帯JSON</td>
+<td>true</td>
+</tr>
+<tr>
+<td><code>write_manifest</code></td>
+<td>完了印 <code>.ready.json</code></td>
+<td>true</td>
+</tr>
+<tr>
+<td><code>image</code></td>
+<td><code>{width, height, format(png/jpeg), pattern(grid/gradient/dots), noise, defect_probability, every, quality, background, foreground, defect_color}</code></td>
+<td>320×240 png grid</td>
+</tr>
+<tr>
+<td><code>xlsx_sheet</code> / <code>xlsx_allow_formulas</code></td>
+<td>シート名 / 数式を許可</td>
+<td><code>&quot;Data&quot;</code> / false</td>
+</tr>
+<tr>
+<td><code>xml_root</code> / <code>xml_row</code></td>
+<td>要素名</td>
+<td><code>records</code> / <code>record</code></td>
+</tr>
+<tr>
+<td><code>parquet_compression</code></td>
+<td><code>snappy</code> <code>gzip</code> <code>zstd</code> <code>none</code></td>
+<td><code>snappy</code></td>
+</tr>
+<tr>
+<td><code>avro_record_name</code> / <code>avro_namespace</code> / <code>avro_codec</code></td>
+<td></td>
+<td><code>SourceRecord</code> / <code>factory.source</code> / <code>deflate</code></td>
+</tr>
+<tr>
+<td><code>pdf_landscape</code> / <code>pdf_font_size</code> / <code>pdf_columns</code></td>
+<td>横向き / 5〜14 / 出す列名の配列</td>
+<td>true / 8 / []</td>
+</tr>
+<tr>
+<td><code>completion_mode</code></td>
+<td><code>manifest-v2</code>（通常は書かない）</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>json_template</code> は <strong>JSON出力にだけ</strong>効く（CSV等は平らな行のまま）。</li>
+</ul>
+<h3 id="5-4-stream-factory-stream-simulator">5.4 <code>stream</code>（factory-stream-simulator）</h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>値</th>
+<th>既定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>envelope</code></td>
+<td>true で本文に <code>_source</code>（record_key/sequence/run_key）を追加</td>
+<td>true</td>
+</tr>
+<tr>
+<td><code>metadata_key</code></td>
+<td>追加キー名（項目名と重複不可）</td>
+<td><code>&quot;_source&quot;</code></td>
+</tr>
+<tr>
+<td><code>http_body</code></td>
+<td>HTTP送信時 <code>array</code> / <code>single</code> / <code>ndjson</code></td>
+<td><code>array</code></td>
+</tr>
+<tr>
+<td><code>topic_template</code></td>
+<td>送信先トピック/subject等。項目・parameters・<code>{sequence}</code>・<code>{record_id}</code> 参照可。空なら接続先の既定</td>
+<td><code>&quot;&quot;</code></td>
+</tr>
+<tr>
+<td><code>payload_template</code></td>
+<td>§5.5 の構造テンプレート or null（null なら行そのまま）</td>
+<td>null</td>
+</tr>
+<tr>
+<td><code>message_size_bytes</code></td>
+<td>0〜65536。本文を空白で水増し（MQTT/キャプチャ）</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>duplicate_rate</code></td>
+<td>0〜1。同じメッセージを1回追加送信する確率</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>delivery_attempts</code> / <code>retry_backoff_ms</code></td>
+<td>null（接続先の設定を使う）or 数値</td>
+<td>null</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>envelope: true</code> のとき <code>payload_template</code> は<strong>オブジェクト</strong>でなければならない。</li>
+<li>MQTT のトピックに <code>#</code> <code>+</code> は使えない。</li>
+</ul>
+<h3 id="5-5-json構造テンプレ-ト-files-json-template-stream-payload-template">5.5 JSON構造テンプレート（<code>files.json_template</code> / <code>stream.payload_template</code>）</h3>
+<p>任意の入れ子オブジェクト・配列を作れる。値が次の文字列なら置き換わる（型は保たれる）：</p>
+<table>
+<thead>
+<tr>
+<th>書き方</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&quot;$row.項目名&quot;</code></td>
+<td>その行の値</td>
+</tr>
+<tr>
+<td><code>&quot;$parameters.名前&quot;</code> / <code>&quot;$parameters.名前.0&quot;</code></td>
+<td>パラメーター（配列は番号で）</td>
+</tr>
+<tr>
+<td><code>&quot;$meta.record_key&quot;</code> / <code>&quot;$meta.sequence&quot;</code> / <code>&quot;$meta.run_key&quot;</code></td>
+<td>メタ情報</td>
+</tr>
+</tbody>
+</table>
+<p>それ以外の文字列・数値はそのまま出力。入れ子は32段まで、1件1MiBまで。<strong>存在しない参照はエラー</strong>（<code>$row.xxx</code> の綴りに注意）。<code>omit</code> 異常で消える項目を参照すると、その行でエラーになるので注意。</p>
+<h3 id="5-6-3ツ-ル共通で使い回したいとき">5.6 3ツール共通で使い回したいとき</h3>
+<ul>
+<li>SQL・ファイル・ストリームでは同じ version: 2 のデータ定義を利用できます。接続先ID・版と利用する出力セクションを実行先で確認します。</li>
+<li>使い回すテンプレートは <strong><code>fields</code> / <code>parameters</code> / <code>anomalies</code> と基本キーだけ</strong>の最小構成にし、<code>sql</code> / <code>files</code> / <code>stream</code> は各ツール用に足す。</li>
+<li><code>run_key</code> と <code>seed</code> と <code>fields</code> を揃えると、SQL・ファイル・ストリームで <strong>同じ record_id・同じ値</strong> が作られ、レイクハウス側での突合試験に使える。</li>
+</ul>
+<hr />
+<h2 id="6-形式b-設備-api-ヒストリアン-ログ-rfid">6. 形式B（設備 / API / ヒストリアン / ログ / RFID）</h2>
+<h3 id="6-1-トップレベル-spec">6.1 トップレベル（Spec）</h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>範囲</th>
+<th>既定</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>version</code></td>
+<td>1</td>
+<td>1</td>
+<td>省略可</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>≤120</td>
+<td><code>&quot;小さく試す&quot;</code></td>
+<td>表示名</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>≤2000</td>
+<td><code>&quot;&quot;</code></td>
+<td>想定・異常の正解</td>
+</tr>
+<tr>
+<td><code>profile_id</code></td>
+<td>ID</td>
+<td><code>&quot;default&quot;</code></td>
+<td>公開・出力設定のID</td>
+</tr>
+<tr>
+<td><code>interval_ms</code></td>
+<td>10〜60000</td>
+<td>1000</td>
+<td>1tick の周期</td>
+</tr>
+<tr>
+<td><code>batch_size</code></td>
+<td>1〜1000</td>
+<td>5</td>
+<td><strong>ログ・RFID</strong>の1tickあたり件数（設備・ヒストリアンは台数を使う）</td>
+</tr>
+<tr>
+<td><code>max_ticks</code></td>
+<td>0〜</td>
+<td>0</td>
+<td>0=停止まで続ける</td>
+</tr>
+<tr>
+<td><code>storage_limit_mb</code></td>
+<td>16〜102400</td>
+<td>1024</td>
+<td>データ容量上限</td>
+</tr>
+<tr>
+<td><code>generator</code></td>
+<td>形式Aと同じ RunSpec</td>
+<td>既定7項目</td>
+<td><strong>使われるのは <code>fields</code> <code>parameters</code> <code>anomalies</code> <code>run_key</code> <code>seed</code> <code>start_sequence</code> のみ</strong>（<code>rows</code> <code>target_rate</code> <code>batch_size</code> <code>sql</code> <code>files</code> <code>stream</code> <code>faults</code> 等は無視される。書かない）</td>
+</tr>
+<tr>
+<td><code>equipment</code> / <code>business</code> / <code>history</code> / <code>logs</code> / <code>identification</code></td>
+<td></td>
+<td>既定あり</td>
+<td><strong>使うツールのものだけ書く</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠ 既定値の罠：<code>equipment.registers</code> の既定は <code>value</code> / <code>sequence_no</code> / <code>status</code> を、<code>history.tags</code> の既定は <code>value</code> を、<code>logs.message_template</code> の既定は <code>entity_id</code> / <code>status</code> / <code>value</code> を参照する。<strong>自分で <code>generator.fields</code> を書いたら、使うツールのセクションも必ず明示して自分の項目名に合わせる。</strong></p>
+</blockquote>
+<h3 id="6-2-設備-factory-equipment-simulator-equipment">6.2 設備（factory-equipment-simulator）：<code>equipment</code></h3>
+<ul>
+<li><code>generator.fields</code> の<strong>全項目</strong>が OPC UA の <code>ns=1;s=Device001.&lt;項目名&gt;</code> として公開される（文字列も可）。</li>
+<li>Modbus には <code>registers</code> で指定した項目だけが載る。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>値</th>
+<th>既定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>devices</code></td>
+<td>1〜247（Modbus device ID 1〜N）</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>registers[]</code></td>
+<td><code>{field, area, address, encoding, byte_order, word_order, scale, offset, enum_values}</code></td>
+<td>value/sequence_no/status</td>
+</tr>
+<tr>
+<td>・<code>area</code></td>
+<td><code>holding</code> <code>input</code> <code>coil</code> <code>discrete</code></td>
+<td>holding</td>
+</tr>
+<tr>
+<td>・<code>address</code></td>
+<td>0始まり（40001表記ではない）</td>
+<td></td>
+</tr>
+<tr>
+<td>・<code>encoding</code></td>
+<td><code>uint16</code> <code>int16</code>（1語）/ <code>uint32</code> <code>int32</code> <code>float32</code>（2語）/ <code>float64</code>（4語）/ <code>bool</code></td>
+<td>float32</td>
+</tr>
+<tr>
+<td>・<code>byte_order</code> / <code>word_order</code></td>
+<td><code>big</code> / <code>little</code></td>
+<td>big</td>
+</tr>
+<tr>
+<td>・<code>scale</code> / <code>offset</code></td>
+<td>レジスター値 = 値×scale+offset</td>
+<td>1 / 0</td>
+</tr>
+<tr>
+<td>・<code>enum_values</code></td>
+<td>文字列→数値の対応 <code>{&quot;RUN&quot;:0,&quot;IDLE&quot;:1}</code></td>
+<td>{}</td>
+</tr>
+<tr>
+<td><code>quality</code></td>
+<td><code>Good</code> <code>BadSensorFailure</code> <code>UncertainLastUsableValue</code></td>
+<td>Good</td>
+</tr>
+<tr>
+<td><code>quality_from_tick</code> / <code>quality_until_tick</code></td>
+<td>品質異常の期間（0=開始/最後まで）</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td><code>offline_from_tick</code> / <code>offline_ticks</code></td>
+<td>一時切断（0=なし）</td>
+<td>0 / 5</td>
+</tr>
+<tr>
+<td><code>read_delay_ms</code></td>
+<td>Modbus応答遅延 0〜5000</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>writable</code></td>
+<td>クライアント書込を許可</td>
+<td>false</td>
+</tr>
+</tbody>
+</table>
+<p>ルール：</p>
+<ul>
+<li>同じ <code>area</code> 内でアドレス幅が重ならないこと（float32 は2語使う：address 0 なら 0〜1）。<code>coil</code> / <code>discrete</code> は <code>bool</code> のみ。</li>
+<li><code>registers[].field</code> は <code>generator.fields</code> に<strong>実在する名前</strong>にする（綴り違いはエラーにならず、Modbus読取が失敗する。§7）。</li>
+<li>文字列項目をレジスターに載せるなら <code>enum_values</code> に<strong>全候補</strong>を書く（<code>choices</code> と一致させる）。</li>
+<li>値がエンコードの範囲に収まること（uint16 は 0〜65535、scale 適用後）。</li>
+</ul>
+<h3 id="6-3-業務api-factory-api-simulator-business">6.3 業務API（factory-api-simulator）：<code>business</code></h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>値</th>
+<th>既定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>resources[]</code></td>
+<td><code>{name, rows, generator}</code>（1〜30個、name 重複不可）</td>
+<td>orders 200件</td>
+</tr>
+<tr>
+<td>・<code>name</code></td>
+<td>URL末尾 <code>/source/rest/&lt;name&gt;</code></td>
+<td></td>
+</tr>
+<tr>
+<td>・<code>rows</code></td>
+<td>初期件数 1〜1,000,000</td>
+<td>200</td>
+</tr>
+<tr>
+<td>・<code>generator</code></td>
+<td>null（=トップの <code>generator</code> を使う）or このコレクション専用の RunSpec（<code>fields</code> 等）</td>
+<td>null</td>
+</tr>
+<tr>
+<td><code>updates_per_tick</code></td>
+<td>各tickで更新する件数（0=固定データ）</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>delete_every_ticks</code></td>
+<td>N tickごとに1件論理削除（0=なし）</td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>cursor_ttl_seconds</code></td>
+<td>カーソル有効期限</td>
+<td>600</td>
+</tr>
+<tr>
+<td><code>page_size</code></td>
+<td>既定ページ件数 1〜1000</td>
+<td>100</td>
+</tr>
+<tr>
+<td><code>fault</code></td>
+<td><code>none</code> <code>rate_limit</code>(429) <code>server_error</code>(503) <code>unauthorized</code>(401) <code>delay</code> <code>duplicate_page</code> <code>skip_page</code> <code>truncate_json</code> <code>cursor_expired</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>fault_every</code> / <code>fault_delay_ms</code></td>
+<td>何リクエストごとに異常 / delayの待ち</td>
+<td>5 / 1000</td>
+</tr>
+</tbody>
+</table>
+<p>ルール：</p>
+<ul>
+<li><strong><code>id</code> は必ず32桁のキーで上書きされる</strong>。業務キー（指図番号など）は <code>order_code</code> のような別名の項目にする。</li>
+<li>更新時は seed を変えて再生成されるため、乱数項目（choice等）は更新で値が変わる。不変にしたい項目は <code>sequence</code> / <code>template</code>（通番ベース）で作る。</li>
+<li>画面の見本はトップの <code>generator</code> の行だけを表示する。<code>resources[].generator</code> の誤りは開始後に失敗として出るので、まず <code>max_ticks</code> を小さくして開始し状態を確認する。</li>
+<li>主コレクションはトップの <code>generator</code> に書いて <code>generator: null</code>、2つ目以降の列構成が違うコレクションだけ専用 <code>generator</code> を持たせるのが分かりやすい。</li>
+</ul>
+<h3 id="6-4-ヒストリアン-factory-historian-simulator-history">6.4 ヒストリアン（factory-historian-simulator）：<code>history</code></h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>値</th>
+<th>既定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tags</code></td>
+<td>記録する項目名の配列（1〜100）。タグ名は <code>device-001.&lt;項目名&gt;</code></td>
+<td><code>[&quot;value&quot;]</code></td>
+</tr>
+<tr>
+<td><code>devices</code></td>
+<td>1〜1000</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>initial_samples</code></td>
+<td>開始時に作る過去の時点数</td>
+<td>1000</td>
+</tr>
+<tr>
+<td><code>sample_seconds</code></td>
+<td>記録上の時刻間隔（秒）。<code>interval_ms</code> と別</td>
+<td>1</td>
+</tr>
+<tr>
+<td><code>source_time_field</code></td>
+<td>空=時刻を自動計算 / datetime 項目名=その値を時刻に使う</td>
+<td><code>&quot;&quot;</code></td>
+</tr>
+<tr>
+<td><code>shift_every</code> / <code>timestamp_shift_seconds</code></td>
+<td>N時点ごとに時刻をずらす</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td><code>retention_days</code></td>
+<td>保持日数</td>
+<td>90</td>
+</tr>
+<tr>
+<td><code>quality</code> / <code>bad_every</code></td>
+<td>品質異常コード（Bad/Uncertain）とN時点ごと</td>
+<td>Good / 0</td>
+</tr>
+<tr>
+<td><code>missing_every</code></td>
+<td>N時点ごとに欠測（保存しない）</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>ルール：</p>
+<ul>
+<li><code>tags</code> は <strong>数値項目（integer / number / decimal）<strong>にする。文字列や存在しない名前は、エラーにならず</strong>値 null・品質 Bad</strong> として記録されてしまう。</li>
+<li><code>initial_samples × devices × tags数 ≤ 2,000,000</code>。</li>
+<li><code>source_time_field</code> を使う場合は <code>data_type: &quot;datetime&quot;</code> の項目名を正確に書く（綴り違いは黙って無視される）。</li>
+</ul>
+<h3 id="6-5-ログ-factory-log-simulator-logs">6.5 ログ（factory-log-simulator）：<code>logs</code></h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>値</th>
+<th>既定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>format</code></td>
+<td><code>jsonl</code> <code>plain</code> <code>rfc5424</code> <code>rfc3164</code></td>
+<td>rfc5424</td>
+</tr>
+<tr>
+<td><code>facility</code> / <code>severity</code></td>
+<td>0〜23 / 0〜7</td>
+<td>16 / 6</td>
+</tr>
+<tr>
+<td><code>hostname</code> / <code>app_name</code></td>
+<td><code>[A-Za-z0-9_.-]</code></td>
+<td>factory-device / mes-demo</td>
+</tr>
+<tr>
+<td><code>message_template</code></td>
+<td>本文。§3.3 と同じ書式で項目と <code>{sequence}</code> を参照</td>
+<td>既定は entity_id/status/value を参照 → <strong>必ず自分の項目で書き直す</strong></td>
+</tr>
+<tr>
+<td><code>tcp_framing</code></td>
+<td><code>octet_counting</code> / <code>newline</code></td>
+<td>octet_counting</td>
+</tr>
+<tr>
+<td><code>rotate_mb</code> / <code>backups</code></td>
+<td>1〜100 / 1〜30</td>
+<td>10 / 5</td>
+</tr>
+<tr>
+<td><code>duplicate_every</code> / <code>malformed_every</code></td>
+<td>N件ごとに二重出力 / ヘッダー破損</td>
+<td>0 / 0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>トップの <code>batch_size</code> が1tickあたりのログ件数。</li>
+<li><code>jsonl</code> は行の全項目＋<code>message</code> を出力する。画面見本の timestamp は固定値（2000-01-01）で表示される（実出力は現在時刻）。</li>
+</ul>
+<h3 id="6-6-rfid-バ-コ-ド-factory-identification-simulator-identification">6.6 RFID・バーコード（factory-identification-simulator）：<code>identification</code></h3>
+<table>
+<thead>
+<tr>
+<th>キー</th>
+<th>値</th>
+<th>既定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tags</code></td>
+<td>タグ・品目の種類数 1〜100000</td>
+<td>100</td>
+</tr>
+<tr>
+<td><code>readers</code></td>
+<td>通過順の読取機名の配列</td>
+<td>GATE-IN, ASSEMBLY, INSPECTION, GATE-OUT</td>
+</tr>
+<tr>
+<td><code>operators</code></td>
+<td>架空の作業者IDの配列</td>
+<td>WORKER-001〜003</td>
+</tr>
+<tr>
+<td><code>barcode</code></td>
+<td><code>code128</code> <code>ean13</code> <code>qr</code></td>
+<td>code128</td>
+</tr>
+<tr>
+<td><code>duplicate_every</code> / <code>drop_every</code></td>
+<td>N件ごとに二重読取 / 読み飛ばし</td>
+<td>0 / 0</td>
+</tr>
+<tr>
+<td><code>wrong_reader_every</code> / <code>unauthorized_every</code></td>
+<td>N件ごとに予定外読取機 / 未登録作業者</td>
+<td>0 / 0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>自動で付く項目：<code>event_id</code> <code>tag_id</code> <code>epc</code> <code>reader_id</code> <code>operator_id</code> <code>event_type</code> <code>direction</code> <code>lot_id</code> <code>barcode</code>。<strong>同名の項目を <code>generator.fields</code> に書くと自分の値が優先</strong>される（標準ラベルAPIのタグと一致しなくなる点に注意）。</li>
+<li><code>generator.fields</code> には追加情報（電波強度、読取時刻、工程情報など）だけを書けばよい。</li>
+</ul>
+<hr />
+<h2 id="7-境界条件を確認する">7. 境界条件を確認する</h2>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>確認すること</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>欠測と加算・倍率・ドリフト</td>
+<td>数値の項目で、有効な値と欠測を分けて確認する。</td>
+</tr>
+<tr>
+<td>大小比較</td>
+<td>比較する型を揃える。NULLは大小比較で一致しない。</td>
+</tr>
+<tr>
+<td>in</td>
+<td>候補は配列にする。</td>
+</tr>
+<tr>
+<td>copy_from</td>
+<td>コピー元は実行内で0始まりの整数位置を使う。</td>
+</tr>
+<tr>
+<td>{no:03d}</td>
+<td>noを先に整数の項目として定義する。</td>
+</tr>
+<tr>
+<td>設備</td>
+<td>レジスターの型・幅・番地と文字列のenum割当を照合する。</td>
+</tr>
+<tr>
+<td>ヒストリアン</td>
+<td>タグに生成する数値項目、時刻源に日時項目を指定する。</td>
+</tr>
+<tr>
+<td>業務API</td>
+<td>コレクション別の定義も見本と少量試験で確認する。</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-検証のしかた">8. 検証のしかた</h2>
+<h3 id="8-1-オフラインとアプリで確認">8.1 オフラインとアプリで確認</h3>
+<ul>
+<li>
+<p>Python環境で <code>uv run --frozen python scripts/validate_template.py my-template.json</code> を実行する。</p>
+</li>
+<li>
+<p>画面：「プリセット / JSON」（形式Bは「設定の保存・JSON」）に貼り付け →「JSONを画面に適用」→「見本を見る」。</p>
+</li>
+<li>
+<p>コマンド（アプリを起動した状態で。ポートは各リポジトリの <code>.env</code> の <code>APP_PORT</code>。既定例：SQL 3560 / ファイル 3561 / ストリーム 3562 / 設備 3640 / API 3641 / ヒストリアン 3642 / ログ 3643 / RFID 3644）：</p>
+</li>
+</ul>
+<pre><code class="language-bash">curl -s -X POST http://127.0.0.1:3560/api/preview -H 'Content-Type: application/json' --data @my-template.json | python3 -m json.tool | head -60
+</code></pre>
+<ul>
+<li>成功：<code>records</code>（見本行）が返る。設備は <code>protocol_mapping.modbus_registers[].status</code> がすべて「変換成功」か確認。</li>
+<li>失敗：<code>detail</code> にエラー。§8.3 で原因を引く。</li>
+<li>見本は<strong>先頭・途中・末尾と異常の境界だけ</strong>を作る確認です。全件の成功保証ではないため、本番前に少ない件数（<code>rows</code> や <code>max_ticks</code> を小さく）で一度実行してください。</li>
+</ul>
+<h3 id="8-2-aiの自己チェックリスト-出力前に全項目を確認">8.2 AIの自己チェックリスト（出力前に全項目を確認）</h3>
+<ul>
+<li>[ ] JSONとして正しい（コメント無し・末尾カンマ無し・ダブルクォート）</li>
+<li>[ ] 形式（A/B）がツールに合っている。形式Bは項目を <code>generator.fields</code> に書いた</li>
+<li>[ ] 本書に無いキーを1つも使っていない（<code>min</code> <code>max</code> <code>type</code> 等）</li>
+<li>[ ] 全 <code>fields</code> に <code>name</code> <code>data_type</code> <code>generator</code> がある。name は英数字<code>_</code>、重複なし</li>
+<li>[ ] 参照（template / sources / condition.field）は<strong>上にある項目</strong>だけ</li>
+<li>[ ] <code>$param</code> で参照した名前はすべて <code>parameters</code> にある</li>
+<li>[ ] template の <code>:d</code> は integer 項目、<code>:.Nf</code> は number/integer 項目だけ</li>
+<li>[ ] 日時はタイムゾーン付き。timestamp 項目は <code>data_type: &quot;datetime&quot;</code></li>
+<li>[ ] choice の <code>weights</code> は choices と同じ長さ</li>
+<li>[ ] ratio の分母は0にならない（最小値1以上）</li>
+<li>[ ] string の値が <code>length</code> に収まる</li>
+<li>[ ] 主キーに <code>null_probability</code> を付けていない。SQL の upsert/update/delete なら主キーがある</li>
+<li>[ ] 異常ルールは §7 の境界条件を確認した。<code>field</code> は実在、<code>to_row ≥ from_row</code></li>
+<li>[ ] 使わないセクションを省略した（形式Aの不要な <code>files</code>/<code>stream</code>、形式Bの不要セクション、<code>generator.rows</code> 等）</li>
+<li>[ ] 形式Bで使うセクションを明示し、<code>registers[].field</code> / <code>history.tags</code> / <code>logs.message_template</code> が自分の項目名と一致</li>
+<li>[ ] <code>description</code> に「想定」「異常の位置と内容（正解）」「確認すること」を書いた</li>
+</ul>
+<h3 id="8-3-エラ-メッセ-ジ-原因-直し方">8.3 エラーメッセージ → 原因 → 直し方</h3>
+<table>
+<thead>
+<tr>
+<th>エラー（<code>detail</code>）</th>
+<th>原因</th>
+<th>直し方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Extra inputs are not permitted</code>（<code>loc</code> の最後がキー名）</td>
+<td>存在しないキー・綴り違い（<code>min</code>→<code>minimum</code> など）</td>
+<td>本書の表にあるキー名に直す。<code>loc</code> の数字は<strong>0始まり</strong>の配列番号（<code>[&quot;body&quot;,&quot;fields&quot;,1,&quot;min&quot;]</code> = 2番目の項目の <code>min</code>）</td>
+</tr>
+<tr>
+<td><code>Input should be 'record_id', 'uuid', ...</code></td>
+<td>generator / data_type / operation 等の綴り</td>
+<td>列挙値から選ぶ</td>
+</tr>
+<tr>
+<td><code>String should match pattern '^[A-Za-z_]...'</code></td>
+<td>項目名・テーブル名に日本語・ハイフン等</td>
+<td>英数字と <code>_</code> に</td>
+</tr>
+<tr>
+<td><code>JSON decode error</code></td>
+<td>JSONの構文エラー</td>
+<td>末尾カンマ・コメント・クォートを確認</td>
+</tr>
+<tr>
+<td><code>パラメーター X が定義されていません</code></td>
+<td><code>$X</code> の参照先が無い</td>
+<td><code>parameters</code> に X を追加</td>
+</tr>
+<tr>
+<td><code>テンプレート参照 X が見つかりません</code></td>
+<td>template で X を参照したが上に無い</td>
+<td>項目の順番を入れ替える／綴りを直す</td>
+</tr>
+<tr>
+<td><code>テンプレートは項目名と短い数値書式だけを参照できます</code></td>
+<td><code>{x:,}</code> <code>{x!r}</code> 等</td>
+<td><code>{x}</code> <code>{x:05d}</code> <code>{x:.2f}</code> だけにする</td>
+</tr>
+<tr>
+<td><code>生成ルールの型・範囲・日時を確認してください</code></td>
+<td>書式 <code>:d</code> と型の不一致、日時の書式誤り、NULLとの大小比較、<code>in</code> に配列以外、copy_from の value 無し</td>
+<td>§7 と §8.2 を順に確認</td>
+</tr>
+<tr>
+<td><code>X は整数ではありません</code></td>
+<td>integer 型に小数（normal 等）</td>
+<td>number にするか integer 生成器に</td>
+</tr>
+<tr>
+<td><code>開始日時にはタイムゾーンが必要です</code> / <code>日時にはタイムゾーンが必要です</code></td>
+<td><code>+09:00</code> などが無い</td>
+<td>タイムゾーンを付ける</td>
+</tr>
+<tr>
+<td><code>最小値が最大値を超えています</code></td>
+<td>minimum &gt; maximum</td>
+<td>入れ替える</td>
+</tr>
+<tr>
+<td><code>選択肢と重みを確認してください</code></td>
+<td>weights の長さ違い・合計0・負数</td>
+<td>長さを揃える</td>
+</tr>
+<tr>
+<td><code>参照元の項目は先に定義してください</code> / <code>条件が参照する項目を先に定義してください</code></td>
+<td>参照先が下にある</td>
+<td>順番を入れ替える</td>
+</tr>
+<tr>
+<td><code>参照元の項目が必要です</code></td>
+<td>reference/sum等で <code>sources</code> が空</td>
+<td><code>sources</code> を書く</td>
+</tr>
+<tr>
+<td><code>比率には0でない分母が必要です</code></td>
+<td>ratio の sources が2つでない／分母0</td>
+<td>2つにし、分母の最小値を1以上に</td>
+</tr>
+<tr>
+<td><code>項目名は重複できません</code></td>
+<td>同名（大小文字無視）</td>
+<td>名前を変える</td>
+</tr>
+<tr>
+<td><code>主キーにNULL率は指定できません</code></td>
+<td>主キーに null_probability</td>
+<td>外す</td>
+</tr>
+<tr>
+<td><code>小数桁数は精度以下にしてください</code></td>
+<td>scale &gt; precision</td>
+<td>直す</td>
+</tr>
+<tr>
+<td><code>異常ルールの対象項目が定義されていません</code></td>
+<td>anomalies.field の綴り</td>
+<td>実在する項目名に</td>
+</tr>
+<tr>
+<td><code>異常終了位置は開始位置以上にしてください</code></td>
+<td>to_row &lt; from_row</td>
+<td>直す</td>
+</tr>
+<tr>
+<td><code>JSONテンプレートの参照先が見つかりません</code></td>
+<td><code>$row.xxx</code> 等の綴り、omit で消えた項目</td>
+<td>綴り・異常との組合せを確認</td>
+</tr>
+<tr>
+<td><code>メタデータを追加する場合、本文テンプレートはJSONオブジェクトにしてください</code></td>
+<td>envelope=true で payload_template が配列等</td>
+<td>オブジェクトにするか envelope=false</td>
+</tr>
+<tr>
+<td><code>ストリームのメタデータ名と生成項目名が重複しています</code></td>
+<td><code>_source</code> という項目がある</td>
+<td>項目名か metadata_key を変える</td>
+</tr>
+<tr>
+<td><code>レジスターのアドレス幅が重複・範囲外です</code></td>
+<td>float32 等の幅を考えずに連番アドレス</td>
+<td>幅（§6.2）を考えて振り直す</td>
+</tr>
+<tr>
+<td><code>coil/discreteの型はboolです</code></td>
+<td>coil に数値型</td>
+<td>encoding を bool に</td>
+</tr>
+<tr>
+<td><code>初期履歴は合計200万点以下にしてください</code></td>
+<td>initial_samples×devices×tags が大きすぎ</td>
+<td>どれかを減らす</td>
+</tr>
+<tr>
+<td><code>コレクション名は重複できません</code></td>
+<td>resources の name 重複</td>
+<td>変える</td>
+</tr>
+<tr>
+<td><code>不正ファイルの生成設定はファイルツール専用です</code></td>
+<td>file 以外で artifact_mode</td>
+<td><code>&quot;none&quot;</code> に</td>
+</tr>
+<tr>
+<td>実行が <code>failed</code> で <code>host_memory_headroom_low</code></td>
+<td>ホストの空きメモリが設定した閾値を下回った</td>
+<td>環境変数 <code>MIN_AVAILABLE_GIB</code> を下げて起動</td>
+</tr>
+<tr>
+<td>実行が <code>failed</code> で <code>NoSuchTableError</code>（SQL）</td>
+<td>テーブル未作成</td>
+<td>画面で「未作成のテーブルを作成」</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-ツ-ル別の完成例">9. ツール別の完成例</h2>
+<h3 id="9-1-sql-設備実績-形式a">9.1 SQL：設備実績（形式A）</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;設備実績 / 3ライン / 温度スパイクあり&quot;,
+  &quot;description&quot;: &quot;【想定】3ライン×10設備の生産実績をSQLに投入し、CDCで取り込む。\n【異常】50〜59件目で温度が250℃に跳ねる。&quot;,
+  &quot;run_key&quot;: &quot;equip-results-001&quot;,
+  &quot;seed&quot;: 42,
+  &quot;rows&quot;: 200,
+  &quot;target_rate&quot;: 0,
+  &quot;batch_size&quot;: 100,
+  &quot;parameters&quot;: {&quot;equipment_count&quot;: 10, &quot;lines&quot;: [&quot;L1&quot;, &quot;L2&quot;, &quot;L3&quot;], &quot;start_time&quot;: &quot;2026-12-01T08:00:00+09:00&quot;},
+  &quot;fields&quot;: [
+    {&quot;name&quot;: &quot;id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;record_id&quot;, &quot;primary_key&quot;: true, &quot;length&quot;: 64},
+    {&quot;name&quot;: &quot;seq_no&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;sequence&quot;},
+    {&quot;name&quot;: &quot;equipment_no&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 1, &quot;maximum&quot;: &quot;$equipment_count&quot;},
+    {&quot;name&quot;: &quot;equipment_code&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;template&quot;, &quot;template&quot;: &quot;EQ-{equipment_no:03d}&quot;, &quot;length&quot;: 16},
+    {&quot;name&quot;: &quot;line&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: &quot;$lines&quot;, &quot;length&quot;: 8},
+    {&quot;name&quot;: &quot;status&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: [&quot;RUN&quot;, &quot;IDLE&quot;, &quot;STOP&quot;], &quot;weights&quot;: [90, 8, 2], &quot;length&quot;: 8},
+    {&quot;name&quot;: &quot;temperature&quot;, &quot;data_type&quot;: &quot;number&quot;, &quot;generator&quot;: &quot;normal&quot;, &quot;mean&quot;: 65, &quot;stddev&quot;: 2.5, &quot;scale&quot;: 1},
+    {&quot;name&quot;: &quot;output_qty&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 80, &quot;maximum&quot;: 120},
+    {&quot;name&quot;: &quot;reject_qty&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 0, &quot;maximum&quot;: 5},
+    {&quot;name&quot;: &quot;good_qty&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;difference&quot;, &quot;sources&quot;: [&quot;output_qty&quot;, &quot;reject_qty&quot;]},
+    {&quot;name&quot;: &quot;yield_ratio&quot;, &quot;data_type&quot;: &quot;number&quot;, &quot;generator&quot;: &quot;ratio&quot;, &quot;sources&quot;: [&quot;good_qty&quot;, &quot;output_qty&quot;], &quot;scale&quot;: 4},
+    {&quot;name&quot;: &quot;unit_price&quot;, &quot;data_type&quot;: &quot;decimal&quot;, &quot;generator&quot;: &quot;constant&quot;, &quot;value&quot;: &quot;125.50&quot;, &quot;precision&quot;: 12, &quot;scale&quot;: 2},
+    {&quot;name&quot;: &quot;stop_reason&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;constant&quot;, &quot;value&quot;: null, &quot;length&quot;: 32,
+     &quot;condition&quot;: {&quot;field&quot;: &quot;status&quot;, &quot;operator&quot;: &quot;eq&quot;, &quot;value&quot;: &quot;STOP&quot;, &quot;then_value&quot;: &quot;MAINTENANCE&quot;}},
+    {&quot;name&quot;: &quot;event_time&quot;, &quot;data_type&quot;: &quot;datetime&quot;, &quot;generator&quot;: &quot;timestamp&quot;, &quot;start&quot;: &quot;$start_time&quot;, &quot;step&quot;: 60, &quot;group_size&quot;: &quot;$equipment_count&quot;}
+  ],
+  &quot;anomalies&quot;: [
+    {&quot;name&quot;: &quot;温度スパイク&quot;, &quot;field&quot;: &quot;temperature&quot;, &quot;operation&quot;: &quot;set&quot;, &quot;value&quot;: 250, &quot;from_row&quot;: 50, &quot;to_row&quot;: 59}
+  ],
+  &quot;sql&quot;: {&quot;schema_name&quot;: &quot;&quot;, &quot;table&quot;: &quot;equipment_results&quot;, &quot;operation&quot;: &quot;insert&quot;}
+}
+</code></pre>
+<h3 id="9-2-ファイル-検査結果-csv-jsonl-形式a">9.2 ファイル：検査結果 CSV＋JSONL（形式A）</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;検査結果 / CSVとJSONL / 入れ子JSON&quot;,
+  &quot;description&quot;: &quot;【想定】検査装置が出力する検査結果ファイルをlandingに置き、ready.jsonを合図に取り込む。\n【異常】300〜399件目で寸法が1件ごとに0.01mmずつ増える。&quot;,
+  &quot;run_key&quot;: &quot;inspection-001&quot;,
+  &quot;seed&quot;: 7,
+  &quot;rows&quot;: 500,
+  &quot;target_rate&quot;: 0,
+  &quot;batch_size&quot;: 100,
+  &quot;parameters&quot;: {&quot;start_time&quot;: &quot;2026-12-01T00:00:00+09:00&quot;, &quot;lots&quot;: [&quot;LOT-A01&quot;, &quot;LOT-A02&quot;, &quot;LOT-B01&quot;]},
+  &quot;fields&quot;: [
+    {&quot;name&quot;: &quot;inspection_id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;uuid&quot;, &quot;primary_key&quot;: true, &quot;length&quot;: 36},
+    {&quot;name&quot;: &quot;lot_id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: &quot;$lots&quot;, &quot;length&quot;: 16},
+    {&quot;name&quot;: &quot;serial_no&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;sequence&quot;, &quot;start&quot;: 100000},
+    {&quot;name&quot;: &quot;serial_code&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;template&quot;, &quot;template&quot;: &quot;SN-{serial_no:08d}&quot;, &quot;length&quot;: 16},
+    {&quot;name&quot;: &quot;width_mm&quot;, &quot;data_type&quot;: &quot;number&quot;, &quot;generator&quot;: &quot;normal&quot;, &quot;mean&quot;: 25.0, &quot;stddev&quot;: 0.05, &quot;scale&quot;: 3},
+    {&quot;name&quot;: &quot;judge&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: [&quot;OK&quot;, &quot;NG&quot;], &quot;weights&quot;: [97, 3], &quot;length&quot;: 2},
+    {&quot;name&quot;: &quot;inspected_at&quot;, &quot;data_type&quot;: &quot;datetime&quot;, &quot;generator&quot;: &quot;timestamp&quot;, &quot;start&quot;: &quot;$start_time&quot;, &quot;step&quot;: 2.5}
+  ],
+  &quot;anomalies&quot;: [
+    {&quot;name&quot;: &quot;寸法ドリフト&quot;, &quot;field&quot;: &quot;width_mm&quot;, &quot;operation&quot;: &quot;ramp&quot;, &quot;value&quot;: 0.01, &quot;from_row&quot;: 300, &quot;to_row&quot;: 399}
+  ],
+  &quot;files&quot;: {
+    &quot;formats&quot;: [&quot;csv&quot;, &quot;json&quot;],
+    &quot;records_per_file&quot;: 100,
+    &quot;json_mode&quot;: &quot;jsonl&quot;,
+    &quot;json_template&quot;: {
+      &quot;id&quot;: &quot;$row.inspection_id&quot;,
+      &quot;lot&quot;: &quot;$row.lot_id&quot;,
+      &quot;serial&quot;: &quot;$row.serial_code&quot;,
+      &quot;measure&quot;: {&quot;width_mm&quot;: &quot;$row.width_mm&quot;},
+      &quot;result&quot;: &quot;$row.judge&quot;,
+      &quot;at&quot;: &quot;$row.inspected_at&quot;,
+      &quot;source_run&quot;: &quot;$meta.run_key&quot;
+    },
+    &quot;csv_encoding&quot;: &quot;utf-8&quot;
+  }
+}
+</code></pre>
+<h3 id="9-3-ストリ-ム-設備テレメトリ-形式a">9.3 ストリーム：設備テレメトリ（形式A）</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;設備テレメトリ / ライン別トピック / 欠測あり&quot;,
+  &quot;description&quot;: &quot;【想定】設備がMQTTでテレメトリを送る。トピックはライン・設備ごと。\n【異常】電流が2%欠測。100〜149件目で振動値が固着。&quot;,
+  &quot;run_key&quot;: &quot;telemetry-001&quot;,
+  &quot;seed&quot;: 11,
+  &quot;rows&quot;: 300,
+  &quot;target_rate&quot;: 20,
+  &quot;batch_size&quot;: 50,
+  &quot;parameters&quot;: {&quot;start_time&quot;: &quot;2026-12-01T00:00:00+09:00&quot;, &quot;lines&quot;: [&quot;L1&quot;, &quot;L2&quot;]},
+  &quot;fields&quot;: [
+    {&quot;name&quot;: &quot;event_id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;record_id&quot;, &quot;primary_key&quot;: true, &quot;length&quot;: 64},
+    {&quot;name&quot;: &quot;line&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: &quot;$lines&quot;, &quot;length&quot;: 8},
+    {&quot;name&quot;: &quot;machine_no&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 1, &quot;maximum&quot;: 5},
+    {&quot;name&quot;: &quot;machine_id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;template&quot;, &quot;template&quot;: &quot;M-{machine_no:02d}&quot;, &quot;length&quot;: 8},
+    {&quot;name&quot;: &quot;vibration&quot;, &quot;data_type&quot;: &quot;number&quot;, &quot;generator&quot;: &quot;normal&quot;, &quot;mean&quot;: 2.0, &quot;stddev&quot;: 0.3, &quot;scale&quot;: 3},
+    {&quot;name&quot;: &quot;current_a&quot;, &quot;data_type&quot;: &quot;number&quot;, &quot;generator&quot;: &quot;uniform&quot;, &quot;minimum&quot;: 10, &quot;maximum&quot;: 12, &quot;scale&quot;: 2, &quot;null_probability&quot;: 0.02},
+    {&quot;name&quot;: &quot;at&quot;, &quot;data_type&quot;: &quot;datetime&quot;, &quot;generator&quot;: &quot;timestamp&quot;, &quot;start&quot;: &quot;$start_time&quot;, &quot;step&quot;: 1}
+  ],
+  &quot;anomalies&quot;: [
+    {&quot;name&quot;: &quot;振動の固着&quot;, &quot;field&quot;: &quot;vibration&quot;, &quot;operation&quot;: &quot;freeze&quot;, &quot;from_row&quot;: 100, &quot;to_row&quot;: 149}
+  ],
+  &quot;stream&quot;: {
+    &quot;envelope&quot;: true,
+    &quot;metadata_key&quot;: &quot;_source&quot;,
+    &quot;topic_template&quot;: &quot;factory/{line}/{machine_id}/telemetry&quot;,
+    &quot;payload_template&quot;: {
+      &quot;id&quot;: &quot;$row.event_id&quot;,
+      &quot;machine&quot;: {&quot;line&quot;: &quot;$row.line&quot;, &quot;id&quot;: &quot;$row.machine_id&quot;},
+      &quot;metrics&quot;: {&quot;vibration&quot;: &quot;$row.vibration&quot;, &quot;current_a&quot;: &quot;$row.current_a&quot;},
+      &quot;ts&quot;: &quot;$row.at&quot;
+    }
+  }
+}
+</code></pre>
+<h3 id="9-4-設備-プレス機6台-形式b">9.4 設備：プレス機6台（形式B）</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;プレス機 / 6台 / OPC UAとModbus&quot;,
+  &quot;description&quot;: &quot;【想定】プレス機6台の温度・回転数・状態・ショット数を収集クライアントが読む。\n【異常】記録位置120〜179（約20〜29tick目）で温度がドリフトする。&quot;,
+  &quot;profile_id&quot;: &quot;default&quot;,
+  &quot;interval_ms&quot;: 1000,
+  &quot;max_ticks&quot;: 0,
+  &quot;generator&quot;: {
+    &quot;run_key&quot;: &quot;press-001&quot;,
+    &quot;seed&quot;: 3,
+    &quot;fields&quot;: [
+      {&quot;name&quot;: &quot;id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;record_id&quot;, &quot;primary_key&quot;: true, &quot;length&quot;: 64},
+      {&quot;name&quot;: &quot;temperature&quot;, &quot;data_type&quot;: &quot;number&quot;, &quot;generator&quot;: &quot;normal&quot;, &quot;mean&quot;: 42.0, &quot;stddev&quot;: 0.8, &quot;scale&quot;: 2},
+      {&quot;name&quot;: &quot;rpm&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 1180, &quot;maximum&quot;: 1220},
+      {&quot;name&quot;: &quot;status&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: [&quot;RUN&quot;, &quot;IDLE&quot;, &quot;ALARM&quot;], &quot;weights&quot;: [94, 5, 1], &quot;length&quot;: 8},
+      {&quot;name&quot;: &quot;shot_count&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;sequence&quot;}
+    ],
+    &quot;anomalies&quot;: [
+      {&quot;name&quot;: &quot;温度ドリフト&quot;, &quot;field&quot;: &quot;temperature&quot;, &quot;operation&quot;: &quot;ramp&quot;, &quot;value&quot;: 0.2, &quot;from_row&quot;: 120, &quot;to_row&quot;: 179}
+    ]
+  },
+  &quot;equipment&quot;: {
+    &quot;devices&quot;: 6,
+    &quot;registers&quot;: [
+      {&quot;field&quot;: &quot;temperature&quot;, &quot;area&quot;: &quot;holding&quot;, &quot;address&quot;: 0, &quot;encoding&quot;: &quot;float32&quot;},
+      {&quot;field&quot;: &quot;rpm&quot;, &quot;area&quot;: &quot;holding&quot;, &quot;address&quot;: 2, &quot;encoding&quot;: &quot;uint16&quot;},
+      {&quot;field&quot;: &quot;status&quot;, &quot;area&quot;: &quot;holding&quot;, &quot;address&quot;: 3, &quot;encoding&quot;: &quot;uint16&quot;, &quot;enum_values&quot;: {&quot;RUN&quot;: 0, &quot;IDLE&quot;: 1, &quot;ALARM&quot;: 2}},
+      {&quot;field&quot;: &quot;shot_count&quot;, &quot;area&quot;: &quot;holding&quot;, &quot;address&quot;: 4, &quot;encoding&quot;: &quot;uint32&quot;}
+    ]
+  }
+}
+</code></pre>
+<h3 id="9-5-業務api-製造指図-在庫-形式b">9.5 業務API：製造指図＋在庫（形式B）</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;業務API / 製造指図と在庫 / 50件ページ&quot;,
+  &quot;description&quot;: &quot;【想定】ERPの製造指図APIと在庫APIを、収集側がページング＋差分で取得する。&quot;,
+  &quot;interval_ms&quot;: 2000,
+  &quot;generator&quot;: {
+    &quot;run_key&quot;: &quot;erp-orders-001&quot;,
+    &quot;seed&quot;: 21,
+    &quot;parameters&quot;: {&quot;products&quot;: [&quot;P-100&quot;, &quot;P-200&quot;, &quot;P-300&quot;]},
+    &quot;fields&quot;: [
+      {&quot;name&quot;: &quot;order_no&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;sequence&quot;, &quot;start&quot;: 1},
+      {&quot;name&quot;: &quot;order_code&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;template&quot;, &quot;template&quot;: &quot;WO-{order_no:06d}&quot;, &quot;length&quot;: 16},
+      {&quot;name&quot;: &quot;product_id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: &quot;$products&quot;, &quot;length&quot;: 16},
+      {&quot;name&quot;: &quot;quantity&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 10, &quot;maximum&quot;: 500},
+      {&quot;name&quot;: &quot;status&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: [&quot;planned&quot;, &quot;running&quot;, &quot;done&quot;], &quot;weights&quot;: [30, 50, 20], &quot;length&quot;: 16},
+      {&quot;name&quot;: &quot;due_date&quot;, &quot;data_type&quot;: &quot;datetime&quot;, &quot;generator&quot;: &quot;timestamp&quot;, &quot;start&quot;: &quot;2026-12-05T17:00:00+09:00&quot;, &quot;step&quot;: 3600}
+    ]
+  },
+  &quot;business&quot;: {
+    &quot;resources&quot;: [
+      {&quot;name&quot;: &quot;orders&quot;, &quot;rows&quot;: 300, &quot;generator&quot;: null},
+      {&quot;name&quot;: &quot;inventory&quot;, &quot;rows&quot;: 60, &quot;generator&quot;: {
+        &quot;run_key&quot;: &quot;erp-inventory-001&quot;,
+        &quot;seed&quot;: 22,
+        &quot;fields&quot;: [
+          {&quot;name&quot;: &quot;item_no&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;sequence&quot;, &quot;start&quot;: 1},
+          {&quot;name&quot;: &quot;item_code&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;template&quot;, &quot;template&quot;: &quot;ITEM-{item_no:04d}&quot;, &quot;length&quot;: 16},
+          {&quot;name&quot;: &quot;qty_on_hand&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 0, &quot;maximum&quot;: 1000},
+          {&quot;name&quot;: &quot;reserved&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 0, &quot;maximum&quot;: 100},
+          {&quot;name&quot;: &quot;available&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;difference&quot;, &quot;sources&quot;: [&quot;qty_on_hand&quot;, &quot;reserved&quot;]}
+        ]
+      }}
+    ],
+    &quot;updates_per_tick&quot;: 3,
+    &quot;page_size&quot;: 50,
+    &quot;cursor_ttl_seconds&quot;: 600,
+    &quot;fault&quot;: &quot;none&quot;
+  }
+}
+</code></pre>
+<h3 id="9-6-ヒストリアン-炉の温度-圧力-形式b">9.6 ヒストリアン：炉の温度・圧力（形式B）</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;ヒストリアン / 炉温度と圧力 / 8設備&quot;,
+  &quot;description&quot;: &quot;【想定】8台の炉の温度・圧力を1秒間隔で1日分バックフィルし、その後リアルタイムで追記する。\n【異常】記録位置4000〜4399（500〜549時点目）で温度が固着。&quot;,
+  &quot;interval_ms&quot;: 1000,
+  &quot;generator&quot;: {
+    &quot;run_key&quot;: &quot;furnace-001&quot;,
+    &quot;seed&quot;: 5,
+    &quot;fields&quot;: [
+      {&quot;name&quot;: &quot;id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;record_id&quot;, &quot;primary_key&quot;: true, &quot;length&quot;: 64},
+      {&quot;name&quot;: &quot;temperature&quot;, &quot;data_type&quot;: &quot;number&quot;, &quot;generator&quot;: &quot;normal&quot;, &quot;mean&quot;: 850, &quot;stddev&quot;: 3, &quot;scale&quot;: 1},
+      {&quot;name&quot;: &quot;pressure_kpa&quot;, &quot;data_type&quot;: &quot;number&quot;, &quot;generator&quot;: &quot;uniform&quot;, &quot;minimum&quot;: 101.0, &quot;maximum&quot;: 103.0, &quot;scale&quot;: 2}
+    ],
+    &quot;anomalies&quot;: [
+      {&quot;name&quot;: &quot;温度の固着&quot;, &quot;field&quot;: &quot;temperature&quot;, &quot;operation&quot;: &quot;freeze&quot;, &quot;from_row&quot;: 4000, &quot;to_row&quot;: 4399}
+    ]
+  },
+  &quot;history&quot;: {
+    &quot;tags&quot;: [&quot;temperature&quot;, &quot;pressure_kpa&quot;],
+    &quot;devices&quot;: 8,
+    &quot;initial_samples&quot;: 86400,
+    &quot;sample_seconds&quot;: 1,
+    &quot;missing_every&quot;: 0,
+    &quot;bad_every&quot;: 0
+  }
+}
+</code></pre>
+<h3 id="9-7-ログ-mesアプリログ-形式b">9.7 ログ：MESアプリログ（形式B）</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;MESアプリログ / JSON Lines / 毎秒10件&quot;,
+  &quot;description&quot;: &quot;【想定】MESのアプリケーションログをJSON Linesで回転ファイルに出力し、ログ収集基盤で取り込む。&quot;,
+  &quot;interval_ms&quot;: 1000,
+  &quot;batch_size&quot;: 10,
+  &quot;generator&quot;: {
+    &quot;run_key&quot;: &quot;meslog-001&quot;,
+    &quot;seed&quot;: 8,
+    &quot;fields&quot;: [
+      {&quot;name&quot;: &quot;id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;record_id&quot;, &quot;primary_key&quot;: true, &quot;length&quot;: 64},
+      {&quot;name&quot;: &quot;level&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;choice&quot;, &quot;choices&quot;: [&quot;INFO&quot;, &quot;WARN&quot;, &quot;ERROR&quot;], &quot;weights&quot;: [90, 8, 2], &quot;length&quot;: 8},
+      {&quot;name&quot;: &quot;station_no&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 1, &quot;maximum&quot;: 12},
+      {&quot;name&quot;: &quot;station&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;template&quot;, &quot;template&quot;: &quot;ST-{station_no:02d}&quot;, &quot;length&quot;: 8},
+      {&quot;name&quot;: &quot;work_order&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;template&quot;, &quot;template&quot;: &quot;WO-{sequence:06d}&quot;, &quot;length&quot;: 16},
+      {&quot;name&quot;: &quot;elapsed_ms&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: 5, &quot;maximum&quot;: 400}
+    ]
+  },
+  &quot;logs&quot;: {
+    &quot;format&quot;: &quot;jsonl&quot;,
+    &quot;hostname&quot;: &quot;mes-app-01&quot;,
+    &quot;app_name&quot;: &quot;mes-core&quot;,
+    &quot;message_template&quot;: &quot;station={station} wo={work_order} level={level} elapsed_ms={elapsed_ms}&quot;,
+    &quot;rotate_mb&quot;: 10,
+    &quot;backups&quot;: 5
+  }
+}
+</code></pre>
+<h3 id="9-8-rfid-組立ライン-形式b">9.8 RFID：組立ライン（形式B）</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;組立ラインRFID / 5工程 / 二重読取あり&quot;,
+  &quot;description&quot;: &quot;【想定】仕掛品タグが5つのゲートを順に通過する。\n【異常】50件ごとに同じ読取（同じevent_id）を再送する。&quot;,
+  &quot;interval_ms&quot;: 1000,
+  &quot;batch_size&quot;: 5,
+  &quot;generator&quot;: {
+    &quot;run_key&quot;: &quot;rfid-assembly-001&quot;,
+    &quot;seed&quot;: 13,
+    &quot;fields&quot;: [
+      {&quot;name&quot;: &quot;id&quot;, &quot;data_type&quot;: &quot;string&quot;, &quot;generator&quot;: &quot;record_id&quot;, &quot;primary_key&quot;: true, &quot;length&quot;: 64},
+      {&quot;name&quot;: &quot;rssi_dbm&quot;, &quot;data_type&quot;: &quot;integer&quot;, &quot;generator&quot;: &quot;integer&quot;, &quot;minimum&quot;: -70, &quot;maximum&quot;: -40},
+      {&quot;name&quot;: &quot;read_at&quot;, &quot;data_type&quot;: &quot;datetime&quot;, &quot;generator&quot;: &quot;timestamp&quot;, &quot;start&quot;: &quot;2026-12-01T08:00:00+09:00&quot;, &quot;step&quot;: 2}
+    ]
+  },
+  &quot;identification&quot;: {
+    &quot;tags&quot;: 200,
+    &quot;readers&quot;: [&quot;GATE-IN&quot;, &quot;WELD&quot;, &quot;PAINT&quot;, &quot;ASSEMBLY&quot;, &quot;GATE-OUT&quot;],
+    &quot;operators&quot;: [&quot;WORKER-001&quot;, &quot;WORKER-002&quot;, &quot;WORKER-003&quot;, &quot;WORKER-004&quot;],
+    &quot;barcode&quot;: &quot;code128&quot;,
+    &quot;duplicate_every&quot;: 50
+  }
+}
+</code></pre>
+<hr />
+<h2 id="10-依頼プロンプト-コピ-して-を埋める">10. 依頼プロンプト（コピーして【】を埋める）</h2>
+<pre><code class="language-text">あなたは、添付の「ダミーデータ生成ツール群 テンプレートJSON作成ハーネス」に厳密に従って、
+テンプレート（プリセット）JSONを作るアシスタントです。ハーネスに無いキーや書き方は使わないでください。
+
+■ 対象ツール：【例：factory-stream-simulator】
+■ 何を試したいか（業務・システムの状況）：【例：MESの設備実績をSQL Serverに入れて、CDCでレイクハウスに取り込めるか確認したい】
+■ データの中身（わかる範囲で）：【例：設備10台、3ライン、状態はRUN/IDLE/STOP、温度は平均65℃前後、生産数・不良数・良品数・歩留まり】
+■ 件数・時間：【例：1分ごと、200件／8時から】
+■ 入れたい異常：【例：50〜59件目で温度が250℃。不良数が生産数を超える行を少し】（なければ「なし」）
+■ 出力先の条件：【SQLならテーブル名と insert/upsert/update/delete。ファイルなら形式。ストリームならトピックの形。設備なら台数とModbusの割当。APIならコレクション名…】
+■ 他ツールと揃えたいキー：【例：run_key=line-a-2026-12、seed=42、equipment_code の形式 EQ-001】（なければ「なし」）
+
+出力は次の順で：
+1. 項目設計表（項目名 / data_type / generator / 主な設定 / 説明）
+2. 異常の正解表（何件目〜何件目に、どの項目へ、何をしたか）
+3. テンプレートJSON（```json のコードブロック1つだけ。最小構成で、使わないセクションは省略）
+4. ハーネス §8.2 自己チェックリストの確認結果（各項目 OK／該当なし）
+5. 画面で確認すべき点（見本のどこを見ればよいか）を3行以内で
+</code></pre>
+<h3 id="10-1-エラ-が出たときの追い依頼">10.1 エラーが出たときの追い依頼</h3>
+<pre><code class="language-text">このJSONをアプリで検証したところ、次のエラーが出ました。ハーネス §7・§8.3 を参照して原因を説明し、
+修正後のJSON全体を ```json ブロック1つで出してください。変更した箇所も箇条書きで教えてください。
+
+エラー：
+【ここにエラー表示（detail）をそのまま貼る】
+</code></pre>
+<h3 id="10-2-既存テンプレ-トを直したいときの依頼">10.2 既存テンプレートを直したいときの依頼</h3>
+<pre><code class="language-text">次のテンプレートJSONを、ハーネスに従って【やりたい変更：例「温度の欠測を5%追加」「件数を1万件に」】に変更してください。
+不要なキーは削って最小構成にし、§8.2 のチェック結果も付けてください。
+
+【ここに今のJSONを貼る】
+</code></pre>
+</article>
+    </main>
+  </div>
+</body>
+</html>

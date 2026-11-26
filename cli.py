@@ -1,5 +1,5 @@
-# モジュール読解: APIを操作するCLI入口。引数を解析し、操作名から固定ルートと必要なJSON本文を選ぶ。
-# 認証ファイルを読みHTTP要求を送るため、ヘルプ表示以外は実サービス操作になり得る。
+"""指定された操作をHTTP APIへ送る。管理認証を設定した環境ではBasic認証を使う。"""
+
 import argparse
 import base64
 import json
@@ -15,7 +15,6 @@ p.add_argument("--url", default="http://127.0.0.1:8080")
 p.add_argument("--spec", type=Path)
 p.add_argument("--run-id")
 a = p.parse_args()
-password = Path(os.environ["APP_PASSWORD_FILE"]).read_text().strip()
 body = None
 route = {
     "info": "/api/info",
@@ -28,12 +27,28 @@ route = {
 }[a.action]
 if a.action in {"preview", "start", "stop", "retry"}:
     body = json.dumps(json.loads(a.spec.read_text()) if a.spec else {}).encode()
-headers = {
-    "Authorization": "Basic "
-    + base64.b64encode(("operator:" + password).encode()).decode(),
-    "Content-Type": "application/json",
-}
-with urlopen(
-    Request(a.url.rstrip("/") + route, data=body, headers=headers), timeout=30
-) as r:
+request = Request(
+    a.url.rstrip("/") + route,
+    data=body,
+    headers={"Content-Type": "application/json"},
+)
+username = os.getenv("ADMIN_USERNAME", "")
+password_file = os.getenv("ADMIN_PASSWORD_FILE", "")
+if username or password_file:
+    if not username or not password_file:
+        p.error(
+            "管理認証を使う場合は ADMIN_USERNAME と ADMIN_PASSWORD_FILE を指定してください"
+        )
+else:
+    password_file = os.getenv("APP_PASSWORD_FILE", "")
+    username = "operator"
+
+if password_file:
+    try:
+        password = Path(password_file).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError):
+        p.error("管理パスワードのファイルを読み取れません")
+    credentials = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
+    request.add_unredirected_header("Authorization", f"Basic {credentials}")
+with urlopen(request, timeout=30) as r:
     print(json.dumps(json.load(r), ensure_ascii=False, indent=2))

@@ -2,7 +2,40 @@
   "$defs": {
     "AnomalyRule": {
       "additionalProperties": false,
+      "description": "通常値へ、指定した範囲・頻度・条件で異常を適用する。",
       "properties": {
+        "$schema": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "JSONエディターの補完に使うスキーマのファイルパスまたはURL。アプリは取得せず、保存済み設定にも含めません。",
+          "title": "エディターのスキーマ参照",
+          "ui_hidden": true,
+          "x-editor-only": true
+        },
+        "_comment": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "テンプレートに書ける編集者向けメモ。アプリの挙動を変えず、取込・保存・書き出しでは省かれます。",
+          "title": "エディター用のメモ",
+          "ui_hidden": true,
+          "x-editor-only": true
+        },
         "name": {
           "default": "異常注入",
           "maxLength": 120,
@@ -38,7 +71,7 @@
           ],
           "title": "異常の作り方",
           "type": "string",
-          "description": "set=値を置換、add=加算、multiply=倍率、ramp=開始位置から増加するドリフト、freeze=開始位置の値に固着、null=NULL、copy_from=指定位置の値をコピー、timestamp_shift=秒単位の時刻ずらし、omit=項目自体を欠落。"
+          "description": "set=値を置換、add=加算、multiply=倍率、ramp=開始位置から増加するドリフト、freeze=開始位置の値に固着、null=NULL、copy_from=指定位置の値をコピー、timestamp_shift=秒単位の時刻ずらし、omit=項目自体を欠落。加算・倍率・ドリフトは元の値が欠測・非数値の行では適用しません。"
         },
         "value": {
           "default": null,
@@ -112,6 +145,41 @@
     },
     "Condition": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": [
+                  "in"
+                ]
+              }
+            },
+            "required": [
+              "operator"
+            ]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "array"
+                  },
+                  {
+                    "pattern": "^\\$",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "value"
+            ]
+          }
+        }
+      ],
+      "description": "先に生成した項目と比較し、一致時に値を置き換える設定。",
       "properties": {
         "field": {
           "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
@@ -132,7 +200,7 @@
           ],
           "title": "比較方法",
           "type": "string",
-          "description": "eq=等しい、ne=異なる、gt/ge=超える/以上、lt/le=未満/以下、in=比較値の配列に含まれる。"
+          "description": "eq/neは一致・不一致、gt/ge/lt/leは大小比較、inは配列に含まれるかを判定します。大小比較では欠測値や比較できない型は不一致になります。inの比較値はJSON配列、または配列を参照する共有パラメーターを指定します。"
         },
         "value": {
           "default": null,
@@ -153,6 +221,7 @@
     },
     "FaultOptions": {
       "additionalProperties": false,
+      "description": "処理や配送の障害を実行中に再現する。",
       "properties": {
         "enabled": {
           "default": false,
@@ -234,7 +303,151 @@
     },
     "FieldRule": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "generator": {
+                "enum": [
+                  "choice"
+                ]
+              }
+            },
+            "required": [
+              "generator"
+            ]
+          },
+          "then": {
+            "properties": {
+              "choices": {
+                "anyOf": [
+                  {
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "pattern": "^\\$",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "choices"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "generator": {
+                "enum": [
+                  "reference",
+                  "sum",
+                  "difference",
+                  "product"
+                ]
+              }
+            },
+            "required": [
+              "generator"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sources": {
+                "minItems": 1
+              }
+            },
+            "required": [
+              "sources"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "generator": {
+                "enum": [
+                  "ratio"
+                ]
+              }
+            },
+            "required": [
+              "generator"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sources": {
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "required": [
+              "sources"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "generator": {
+                "enum": [
+                  "timestamp"
+                ]
+              }
+            },
+            "required": [
+              "generator"
+            ]
+          },
+          "then": {
+            "properties": {
+              "start": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "start"
+            ]
+          }
+        }
+      ],
+      "description": "1項目の生成方式と型を定義する。別の項目は定義順で参照する。",
       "properties": {
+        "$schema": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "JSONエディターの補完に使うスキーマのファイルパスまたはURL。アプリは取得せず、保存済み設定にも含めません。",
+          "title": "エディターのスキーマ参照",
+          "ui_hidden": true,
+          "x-editor-only": true
+        },
+        "_comment": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "テンプレートに書ける編集者向けメモ。アプリの挙動を変えず、取込・保存・書き出しでは省かれます。",
+          "title": "エディター用のメモ",
+          "ui_hidden": true,
+          "x-editor-only": true
+        },
         "name": {
           "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
           "title": "項目名",
@@ -517,17 +730,33 @@
     },
     "FileOptions": {
       "additionalProperties": false,
+      "description": "ファイルを書き出す形式、分割と完了通知を定義する。",
       "properties": {
+        "completion_mode": {
+          "default": "manifest-v2",
+          "enum": [
+            "manifest-v2",
+            "lakehouse-products-local"
+          ],
+          "title": "完了通知形式",
+          "type": "string",
+          "description": "manifest-v2は従来の.ready.jsonを出力する既定方式です。lakehouse-products-localは信頼されたローカル領域への製品CSV・単一バッチ試験専用で、隣接SHA256 .readyを出力します。対応例の設定を使い、他形式・リモート接続・異常注入は拒否します。下流取込の完了は保証しません。"
+        },
         "formats": {
           "items": {
             "enum": [
               "json",
               "csv",
-              "image"
+              "image",
+              "xlsx",
+              "xml",
+              "parquet",
+              "avro",
+              "pdf"
             ],
             "type": "string"
           },
-          "maxItems": 3,
+          "maxItems": 8,
           "minItems": 1,
           "title": "出力形式 JSON",
           "type": "array",
@@ -659,6 +888,94 @@
           "type": "boolean",
           "description": "各バッチの全ファイル保存後に.ready.jsonを最後に作成します。下流はこれを取り込みの目印にできます。SHA256とサイズを記録します。"
         },
+        "xlsx_sheet": {
+          "default": "Data",
+          "maxLength": 31,
+          "minLength": 1,
+          "pattern": "^[^\\[\\]:*?/\\\\]+$",
+          "title": "Excelシート名",
+          "type": "string",
+          "description": "31文字以下。Excelで使用できない : / \\ ? * [ ] は含めません。"
+        },
+        "xlsx_allow_formulas": {
+          "default": false,
+          "title": "Excelの数式を許可",
+          "type": "boolean",
+          "description": "無効なら=で始まる値も文字列として保存。ユーザーが意図して数式を生成する場合だけ有効にします。"
+        },
+        "xml_root": {
+          "default": "records",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "XMLルート要素",
+          "type": "string",
+          "description": "例: records。日本語データはUTF-8、NULLはnull=true属性で表現します。"
+        },
+        "xml_row": {
+          "default": "record",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "XMLレコード要素",
+          "type": "string",
+          "description": "例: record。データ項目名を子要素に使用し、XML特殊文字はエスケープします。"
+        },
+        "parquet_compression": {
+          "default": "snappy",
+          "enum": [
+            "snappy",
+            "gzip",
+            "zstd",
+            "none"
+          ],
+          "title": "Parquet圧縮",
+          "type": "string",
+          "description": "snappy / gzip / zstd / none。型はデータ定義から固定し、日時はUTC、JSON項目はJSON文字列で保存します。"
+        },
+        "avro_record_name": {
+          "default": "SourceRecord",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
+          "title": "Avroレコード名",
+          "type": "string",
+          "description": "Avroスキーマのrecord名。英数字と下線で指定します。"
+        },
+        "avro_namespace": {
+          "default": "factory.source",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$",
+          "title": "Avro名前空間",
+          "type": "string",
+          "description": "例: factory.source。日時はtimestamp-micros、小数はdecimal logical typeを使用。"
+        },
+        "avro_codec": {
+          "default": "deflate",
+          "enum": [
+            "null",
+            "deflate"
+          ],
+          "title": "Avro圧縮",
+          "type": "string",
+          "description": "nullは圧縮なし、deflateは圧縮。型とNULL許可は項目定義に従います。"
+        },
+        "pdf_landscape": {
+          "default": true,
+          "title": "PDFを横向きにする",
+          "type": "boolean",
+          "description": "列数が多い表には横向きA4を推奨。全レコードを複数ページへ出力します。"
+        },
+        "pdf_font_size": {
+          "default": 8,
+          "maximum": 14,
+          "minimum": 5,
+          "title": "PDF文字サイズ",
+          "type": "integer",
+          "description": "5〜14pt。日本語のCIDフォントを使用し、列幅に合わせて折り返します。"
+        },
+        "pdf_columns": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "PDF出力列 JSON",
+          "type": "array",
+          "description": "空の配列は全列。指定するとその順序の列だけをレポートに出力。例: [\"entity_id\",\"value\",\"status\"]。"
+        },
         "image": {
           "$ref": "#/$defs/ImageOptions",
           "title": "疑似検査画像の条件",
@@ -670,6 +987,7 @@
     },
     "ImageOptions": {
       "additionalProperties": false,
+      "description": "合成画像の寸法・書式・パターンを定義する。",
       "properties": {
         "width": {
           "default": 320,
@@ -767,6 +1085,7 @@
     },
     "Predicate": {
       "additionalProperties": false,
+      "description": "生成済みの値が異常の適用条件に一致するかを定義する。",
       "properties": {
         "field": {
           "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$",
@@ -787,7 +1106,7 @@
           ],
           "title": "比較方法",
           "type": "string",
-          "description": "eq=等しい、ne=異なる、gt/ge=超える/以上、lt/le=未満/以下、in=比較値の配列に含まれる。"
+          "description": "eq/neは一致・不一致、gt/ge/lt/leは大小比較、inは配列に含まれるかを判定します。大小比較では欠測値や比較できない型は不一致になります。inの比較値はJSON配列、または配列を参照する共有パラメーターを指定します。"
         },
         "value": {
           "default": null,
@@ -803,6 +1122,7 @@
     },
     "SqlOptions": {
       "additionalProperties": false,
+      "description": "書き込むテーブルと行の操作を定義する。",
       "properties": {
         "schema_name": {
           "default": "",
@@ -836,6 +1156,7 @@
     },
     "StreamOptions": {
       "additionalProperties": false,
+      "description": "配信する本文の構造・トピック・再試行を指定する。",
       "properties": {
         "envelope": {
           "default": true,
@@ -925,7 +1246,40 @@
     }
   },
   "additionalProperties": false,
+  "description": "生成件数、乱数、項目定義と出力先への参照を保持する。",
   "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "JSONエディターの補完に使うスキーマのファイルパスまたはURL。アプリは取得せず、保存済み設定にも含めません。",
+      "title": "エディターのスキーマ参照",
+      "ui_hidden": true,
+      "x-editor-only": true
+    },
+    "_comment": {
+      "anyOf": [
+        {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "テンプレートに書ける編集者向けメモ。アプリの挙動を変えず、取込・保存・書き出しでは省かれます。",
+      "title": "エディター用のメモ",
+      "ui_hidden": true,
+      "x-editor-only": true
+    },
     "version": {
       "const": 2,
       "default": 2,

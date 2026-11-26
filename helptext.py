@@ -1,10 +1,9 @@
-# モジュール読解: 設定画面用の日本語説明と接続方式の説明をJSON Schemaへ付ける。
-# HELPのキーはモデル項目と対応させる。説明追加時もenum・default・型制約は変えない。
-"""Japanese in-place documentation, shared by the form and JSON contracts."""
+"""入力スキーマに、画面と設定リファレンスで使う項目名と説明を追加する。"""
 
 from config import ConnectionProfile, RunSpec
 
 HELP = {
+    'completion_mode': ('完了通知形式', 'manifest-v2は従来の.ready.jsonを出力する既定方式です。lakehouse-products-localは信頼されたローカル領域への製品CSV・単一バッチ試験専用で、隣接SHA256 .readyを出力します。対応例の設定を使い、他形式・リモート接続・異常注入は拒否します。下流取込の完了は保証しません。'),
     "description": (
         "用途・メモ",
         "このプリセットの用途、変更した設定、実行前の条件を記録できます。選択欄にも表示します。接続先のパスワード等は記載せず、接続プロファイルへ保存してください。",
@@ -799,9 +798,32 @@ HELP["kind"] = (
 )
 
 
-# 読解 annotated_schemas: RunSpecと接続モデルから新しいJSON Schemaを作り、日本語の表示説明を注釈して返す。
-# kind指定時は接続方式を絞る。元のPydanticモデルや保存済み契約ファイルは変更しない。
+HELP.update(
+    {'avro_codec': ('Avro圧縮', 'nullは圧縮なし、deflateは圧縮。型とNULL許可は項目定義に従います。'),
+     'avro_namespace': ('Avro名前空間',
+                        '例: factory.source。日時はtimestamp-micros、小数はdecimal '
+                        'logical typeを使用。'),
+     'avro_record_name': ('Avroレコード名', 'Avroスキーマのrecord名。英数字と下線で指定します。'),
+     'parquet_compression': ('Parquet圧縮',
+                             'snappy / gzip / zstd / '
+                             'none。型はデータ定義から固定し、日時はUTC、JSON項目はJSON文字列で保存します。'),
+     'pdf_columns': ('PDF出力列 JSON',
+                     '空の配列は全列。指定するとその順序の列だけをレポートに出力。例: '
+                     '["entity_id","value","status"]。'),
+     'pdf_font_size': ('PDF文字サイズ', '5〜14pt。日本語のCIDフォントを使用し、列幅に合わせて折り返します。'),
+     'pdf_landscape': ('PDFを横向きにする', '列数が多い表には横向きA4を推奨。全レコードを複数ページへ出力します。'),
+     'xlsx_allow_formulas': ('Excelの数式を許可',
+                             '無効なら=で始まる値も文字列として保存。ユーザーが意図して数式を生成する場合だけ有効にします。'),
+     'xlsx_sheet': ('Excelシート名',
+                    '31文字以下。Excelで使用できない : / \\ ? * [ ] は含めません。'),
+     'xml_root': ('XMLルート要素',
+                  '例: records。日本語データはUTF-8、NULLはnull=true属性で表現します。'),
+     'xml_row': ('XMLレコード要素', '例: record。データ項目名を子要素に使用し、XML特殊文字はエスケープします。')}
+)
+
+
 def annotated_schemas(kind=None):
+    """入力スキーマに日本語の説明を加え、接続種別を現在のアプリに絞る。"""
     from config import ALLOWED_KINDS
 
     result = {
@@ -809,10 +831,10 @@ def annotated_schemas(kind=None):
         "connection": ConnectionProfile.model_json_schema(),
     }
 
-    # 読解 annotated_schemas.annotate: propertiesをHELPと対応させ、その場でtitle/descriptionを設定して$defsも再帰処理する。
-    # HELPにキーがない場合はKeyErrorで不整合を露出させ、黙って説明を欠落させない。
     def annotate(schema):
         for name, prop in schema.get("properties", {}).items():
+            if prop.get("x-editor-only"):
+                continue
             title, description = HELP[name]
             prop.update(title=title, description=description)
         for child in schema.get("$defs", {}).values():
@@ -831,7 +853,7 @@ def annotated_schemas(kind=None):
     )
     definitions["AnomalyRule"]["properties"]["operation"].update(
         title="異常の作り方",
-        description="set=値を置換、add=加算、multiply=倍率、ramp=開始位置から増加するドリフト、freeze=開始位置の値に固着、null=NULL、copy_from=指定位置の値をコピー、timestamp_shift=秒単位の時刻ずらし、omit=項目自体を欠落。",
+        description="set=値を置換、add=加算、multiply=倍率、ramp=開始位置から増加するドリフト、freeze=開始位置の値に固着、null=NULL、copy_from=指定位置の値をコピー、timestamp_shift=秒単位の時刻ずらし、omit=項目自体を欠落。加算・倍率・ドリフトは元の値が欠測・非数値の行では適用しません。",
     )
     definitions["AnomalyRule"]["properties"]["value"].update(
         title="置換値 / 増分 / 倍率 / 秒数 JSON",
@@ -845,6 +867,13 @@ def annotated_schemas(kind=None):
         title="異常が発生する確率",
         description="適用位置・条件を満たした行に対する0〜1の確率。同じrun_keyとseedなら再現可能です。",
     )
+    comparison = (
+        "eq/neは一致・不一致、gt/ge/lt/leは大小比較、inは配列に含まれるかを判定します。"
+        "大小比較では欠測値や比較できない型は不一致になります。"
+        "inの比較値はJSON配列、または配列を参照する共有パラメーターを指定します。"
+    )
+    for key in ("Condition", "Predicate"):
+        definitions[key]["properties"]["operator"]["description"] = comparison
     if kind:
         result["connection"]["properties"]["kind"]["enum"] = sorted(ALLOWED_KINDS[kind])
         result["connection"]["properties"]["kind"]["description"] = "\n\n".join(

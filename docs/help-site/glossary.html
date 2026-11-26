@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>用語集 | ストリーム送信</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/help.css">
+  <script src="/static/help.js" defer></script>
+</head>
+<body class="help-page">
+  <a class="help-skip" href="#help-content">本文へ移動</a>
+  <div class="help-top">
+    <a class="help-home" href="/">ストリーム送信</a>
+    <a href="/">アプリに戻る</a>
+  </div>
+  <div class="help-layout">
+    <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html">APIの使い方</a><a href="/help/glossary.html" aria-current="page">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
+    <main class="help-content" id="help-content">
+      <article><h1>用語集</h1>
+<table>
+<thead>
+<tr>
+<th>用語</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ひな型・プリセット</td>
+<td>生成する内容、件数、異常条件をまとめた設定です。</td>
+</tr>
+<tr>
+<td>見本・プレビュー</td>
+<td>設定で生成される形と一部の値を画面に表示します。</td>
+</tr>
+<tr>
+<td>プロファイル</td>
+<td>接続先や方式、認証方法をまとめた設定です。</td>
+</tr>
+<tr>
+<td>リビジョン・版</td>
+<td>設定を保存した順番の番号です。ジョブなどで使う版を固定します。</td>
+</tr>
+<tr>
+<td>乱数シード</td>
+<td>同じ疑似データを再現するための数です。</td>
+</tr>
+<tr>
+<td>record_key</td>
+<td>行やイベントを区別する値です。再送や取り込みの突合に使います。</td>
+</tr>
+<tr>
+<td>tick</td>
+<td>定期処理の1回分で、複数行を作ることがあります。</td>
+</tr>
+<tr>
+<td>バッチ</td>
+<td>まとめて処理する単位です。</td>
+</tr>
+<tr>
+<td>ランディング</td>
+<td>ファイルを取り込む前の受け渡し用フォルダです。</td>
+</tr>
+<tr>
+<td>マニフェスト・ready.json</td>
+<td>完成したファイルと件数、サイズ、ハッシュなどを記録する通知です。</td>
+</tr>
+<tr>
+<td>主キー</td>
+<td>DBの各行を一意に区別する列または列の組み合わせです。</td>
+</tr>
+<tr>
+<td>CDC</td>
+<td>DBへの追加・更新・削除を後続システムへ取り込む仕組みです。</td>
+</tr>
+<tr>
+<td>UPSERT</td>
+<td>キーに一致する行があれば更新し、なければ追加します。</td>
+</tr>
+<tr>
+<td>MQTT・ブローカー・トピック</td>
+<td>MQTTは配送方式、ブローカーは受け渡し役、トピックは振り分け先の名前です。</td>
+</tr>
+<tr>
+<td>outbox</td>
+<td>未配送や配送済みの状態を保存する領域です。</td>
+</tr>
+<tr>
+<td>ACK</td>
+<td>送信先の受付応答です。後段の処理完了は受信側で確認します。</td>
+</tr>
+<tr>
+<td>OPC UA NodeId</td>
+<td>OPC UAで値や設備を見分けるIDです。</td>
+</tr>
+<tr>
+<td>Modbusレジスター</td>
+<td>値を読み書きする番地です。設定は0始まりで、float32は2番地を使います。</td>
+</tr>
+<tr>
+<td>snapshot・スナップショット</td>
+<td>複数のページを同じ基準で読むために固定した時点です。</td>
+</tr>
+<tr>
+<td>cursor・カーソル</td>
+<td>続きを取得するための有効期間付きの目印です。</td>
+</tr>
+<tr>
+<td>delta・差分</td>
+<td>前回の取得の基準時点以降の追加、変更、削除です。</td>
+</tr>
+<tr>
+<td>ETag</td>
+<td>HTTPのリソースの版を確かめる値です。</td>
+</tr>
+<tr>
+<td>タグ・品質・欠測</td>
+<td>履歴検索名、値が使えるかの区分、予定時点に値がない状態です。</td>
+</tr>
+<tr>
+<td>Syslog</td>
+<td>ログ転送の標準です。書式と配送方法を選びます。</td>
+</tr>
+<tr>
+<td>ローテーション</td>
+<td>ログが一定の量になったら別ファイルへ切り替えて保管する仕組みです。</td>
+</tr>
+<tr>
+<td>RFIDタグ・読取機</td>
+<td>物や人のIDと、その通過を検出する装置です。</td>
+</tr>
+<tr>
+<td>capture・ローカル記録</td>
+<td>外部送り先を使わず、アプリ内に出力を記録します。</td>
+</tr>
+</tbody>
+</table>
+<p><a href="/help/index.html">初めて使う</a> · <a href="/help/settings.html">設定リファレンス</a></p>
+</article>
+    </main>
+  </div>
+</body>
+</html>

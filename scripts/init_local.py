@@ -1,4 +1,3 @@
-# モジュール読解: 指定場所にローカル利用用の非公開設定を準備する。既存の環境ファイルと秘密ファイルを上書きせず、値は表示しない。
 """Create private local settings without printing or overwriting credentials."""
 
 import argparse
@@ -49,3 +48,4 @@ print(
         ensure_ascii=False,
     )
 )
+print("VM内の既定URL: ブラウザーで http://127.0.0.1:3562/ を開きます。APP_PORTを変更した場合はその番号を使います。")

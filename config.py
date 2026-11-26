@@ -1,6 +1,4 @@
-# モジュール読解: Pydanticによるv2入力契約。識別子・範囲・方式の組合せを検証し、JSON Schemaの起点になる。
-# 検証モデルと接続試験は分離する。クラス説明は公開schemaを変えないようコメントで記す。
-"""Versioned, domain-independent connection and generation contracts."""
+"""Pydanticで接続先とデータ生成の入力を検証し、JSON Schemaを公開する。"""
 
 from __future__ import annotations
 
@@ -35,17 +33,45 @@ ALLOWED_KINDS = {
 }
 
 
-# 未知の設定キーと非有限数を共通で拒否する。モデルの説明は公開schemaを変えないコメントとする。
-# 読解 Model: 設定モデルの共通基底。未知キーを拒否し、非有限数を許可しない。
-# 入力契約に影響する設定なので説明のためにmodel_configを緩めない。
+class ConfigurationError(ValueError):
+    """設定を直すための、入力値を含まない利用者向けメッセージ。"""
+
+
 class Model(BaseModel):
+    """設定の未知キーと非有限数を拒否する。"""
+
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
+class TemplateAnnotations(Model):
+    """エディター用の注釈を受け取る。生成・保存・書き出しには使用しない。"""
+
+    editor_schema: str | None = Field(
+        default=None,
+        alias="$schema",
+        max_length=2048,
+        exclude=True,
+        repr=False,
+        title="エディターのスキーマ参照",
+        description="JSONエディターの補完に使うスキーマのファイルパスまたはURL。アプリは取得せず、保存済み設定にも含めません。",
+        json_schema_extra={"ui_hidden": True, "x-editor-only": True},
+    )
+    editor_comment: str | None = Field(
+        default=None,
+        alias="_comment",
+        max_length=4000,
+        exclude=True,
+        repr=False,
+        title="エディター用のメモ",
+        description="テンプレートに書ける編集者向けメモ。アプリの挙動を変えず、取込・保存・書き出しでは省かれます。",
+        json_schema_extra={"ui_hidden": True, "x-editor-only": True},
+    )
+
+
 # 接続方式と認証情報を保持する入力契約。保存・表示時の秘密値処理はstorage側が担う。
-# 読解 ConnectionProfile: 方式・宛先・認証・TLSなどの接続契約。秘密値はSecretStrで受ける。
-# 入力検証と疎通確認は別段階であり、モデル生成だけで外部接続しない。
 class ConnectionProfile(Model):
+    """保存する接続先の設定。接続・疎通確認は別の処理で行う。"""
+
     id: str = Field(pattern=PROFILE_ID)
     name: str = Field(min_length=1, max_length=120)
     kind: Literal[
@@ -178,26 +204,26 @@ class ConnectionProfile(Model):
             or (self.kind == "kafka" and not self.bootstrap_servers)
         ):
             if not self.host or any(c in self.host for c in "/@?# \r\n"):
-                raise ValueError("ホスト名またはIPアドレスを指定してください")
+                raise ConfigurationError("ホスト名またはIPアドレスを指定してください")
         if (
             self.kind == "oracle"
             and self.connection_method == "host"
             and not (self.service_name or self.sid)
         ):
-            raise ValueError("Oracleのサービス名またはSIDが必要です")
+            raise ConfigurationError("Oracleのサービス名またはSIDが必要です")
         if self.service_name and self.sid:
-            raise ValueError("Oracleのサービス名とSIDはどちらか一方を指定してください")
+            raise ConfigurationError("Oracleのサービス名とSIDはどちらか一方を指定してください")
         if (
             self.kind in {"sqlserver", "postgresql", "mysql", "mariadb"}
             and not self.database
         ):
-            raise ValueError("データベース名が必要です")
+            raise ConfigurationError("データベース名が必要です")
         if self.kind == "sqlite" and not self.sqlite_path:
-            raise ValueError("SQLiteファイルを指定してください")
+            raise ConfigurationError("SQLiteファイルを指定してください")
         if self.kind in {"local", "nfs"} and not self.directory:
-            raise ValueError("出力ディレクトリが必要です")
+            raise ConfigurationError("出力ディレクトリが必要です")
         if self.kind == "s3" and not self.bucket:
-            raise ValueError("バケット名が必要です")
+            raise ConfigurationError("バケット名が必要です")
         for value, required in [
             (self.url if self.kind == "http" else "", self.kind == "http"),
             (self.endpoint_url if self.kind == "s3" else "", False),
@@ -211,16 +237,16 @@ class ConnectionProfile(Model):
                     or parsed.password
                     or parsed.fragment
                 ):
-                    raise ValueError("認証情報を含まないHTTP(S) URLを指定してください")
+                    raise ConfigurationError("認証情報を含まないHTTP(S) URLを指定してください")
         if self.kind == "mqtt" and (
             "\x00" in self.topic or any(c in self.topic for c in "#\n\r+")
         ):
-            raise ValueError("送信用トピックにワイルドカードは使用できません")
+            raise ConfigurationError("送信用トピックにワイルドカードは使用できません")
         if any(
             name not in SECRET_FIELDS and name != "nats_token"
             for name in self.clear_secrets
         ):
-            raise ValueError("認証情報の削除対象を確認してください")
+            raise ConfigurationError("認証情報の削除対象を確認してください")
         if self.kind in DATABASE_KINDS - {"sqlite"}:
             auth = {
                 "sqlserver": {
@@ -253,15 +279,15 @@ class ConnectionProfile(Model):
                 self.database_auth not in auth[self.kind]
                 or self.connection_method not in methods[self.kind]
             ):
-                raise ValueError(
+                raise ConfigurationError(
                     "選択したDBに対応する認証方式・接続方法を選んでください"
                 )
             if self.connection_method in {"dsn", "service"} and not self.dsn:
-                raise ValueError("DSN・TNSエイリアスまたはサービス名を指定してください")
+                raise ConfigurationError("DSN・TNSエイリアスまたはサービス名を指定してください")
             if self.connection_method == "unix_socket" and not self.unix_socket:
-                raise ValueError("Unixソケットのパスを指定してください")
+                raise ConfigurationError("Unixソケットのパスを指定してください")
         if self.kind == "smb" and not self.share:
-            raise ValueError("SMB共有名を指定してください")
+            raise ConfigurationError("SMB共有名を指定してください")
         if self.kind == "websocket":
             parsed = urlsplit(self.url)
             if (
@@ -270,7 +296,7 @@ class ConnectionProfile(Model):
                 or parsed.username
                 or parsed.password
             ):
-                raise ValueError(
+                raise ConfigurationError(
                     "認証情報を含まないws://またはwss:// URLを指定してください"
                 )
         import re
@@ -283,24 +309,53 @@ class ConnectionProfile(Model):
                 "host",
                 "content-length",
             }:
-                raise ValueError(
+                raise ConfigurationError(
                     "このHTTPヘッダーは認証設定または本文設定で指定してください"
                 )
         return self
 
 
-# 読解 Condition: 先行する項目の値を比較し、成立時に置換する条件。任意の式やコードは受け付けない。
+def _requires_if(selector, values, key, schema):
+    """指定した生成方法・比較方法でだけ必須になる入力を表す。"""
+    return {
+        "if": {"properties": {selector: {"enum": values}}, "required": [selector]},
+        "then": {"properties": {key: schema}, "required": [key]},
+    }
+
+
+_PARAMETER_REFERENCE = {"type": "string", "pattern": r"^\$"}
+
+
 class Condition(Model):
+    """先に生成した項目と比較し、一致時に値を置き換える設定。"""
+
+    model_config = ConfigDict(json_schema_extra={"allOf": [
+        _requires_if("operator", ["in"], "value", {"anyOf": [
+            {"type": "array"}, _PARAMETER_REFERENCE,
+        ]}),
+    ]})
+
     field: str = Field(pattern=IDENTIFIER)
     operator: Literal["eq", "ne", "gt", "ge", "lt", "le", "in"] = "eq"
     value: Any = None
     then_value: Any = None
 
 
-# 定義順に評価する一項目の生成規則。参照先は先行する項目である必要がある。
-# 読解 FieldRule: 一項目の型・生成方法・参照・条件・NULL率をまとめる。
-# 先行項目を参照する順序と、型変換時の範囲検査を生成エンジンと共有する。
-class FieldRule(Model):
+class FieldRule(TemplateAnnotations):
+    """1項目の生成方式と型を定義する。別の項目は定義順で参照する。"""
+
+    model_config = ConfigDict(json_schema_extra={"allOf": [
+        _requires_if("generator", ["choice"], "choices", {"anyOf": [
+            {"type": "array", "minItems": 1}, _PARAMETER_REFERENCE,
+        ]}),
+        _requires_if(
+            "generator", ["reference", "sum", "difference", "product"],
+            "sources", {"minItems": 1},
+        ),
+        _requires_if("generator", ["ratio"], "sources", {"minItems": 2, "maxItems": 2}),
+        _requires_if("generator", ["timestamp"], "start", {"type": "string"}),
+    ]})
+
     name: str = Field(pattern=IDENTIFIER)
     data_type: Literal[
         "string", "integer", "number", "decimal", "boolean", "datetime", "json"
@@ -348,26 +403,28 @@ class FieldRule(Model):
     def valid_rule(self):
         """精度・主キーのNULL率・派生値の参照元について矛盾を拒否する。"""
         if self.scale > self.precision:
-            raise ValueError("小数桁数は精度以下にしてください")
+            raise ConfigurationError("小数桁数は精度以下にしてください")
         if self.primary_key and self.null_probability:
-            raise ValueError("主キーにNULL率は指定できません")
+            raise ConfigurationError("主キーにNULL率は指定できません")
         if (
             self.generator in {"reference", "sum", "difference", "product", "ratio"}
             and not self.sources
         ):
-            raise ValueError("参照元の項目が必要です")
+            raise ConfigurationError("参照元の項目が必要です")
         return self
 
 
-# 読解 SqlOptions: SQL出力のschema・表・操作種別を制限する入力。自由なSQL本文は受け付けない。
 class SqlOptions(Model):
+    """書き込むテーブルと行の操作を定義する。"""
+
     schema_name: str = Field(default="", pattern=r"^$|" + IDENTIFIER)
     table: str = Field(default="sample_records", pattern=IDENTIFIER)
     operation: Literal["insert", "upsert", "update", "delete"] = "upsert"
 
 
-# 読解 ImageOptions: 疑似画像の寸法・模様・色・欠陥率を定義する。実画像の読込み指定ではない。
 class ImageOptions(Model):
+    """合成画像の寸法・書式・パターンを定義する。"""
+
     width: int = Field(default=320, ge=32, le=4096)
     height: int = Field(default=240, ge=32, le=4096)
     format: Literal["png", "jpeg"] = "png"
@@ -381,12 +438,14 @@ class ImageOptions(Model):
     defect_color: str = Field(default="#ef463c", pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
-# 読解 FileOptions: 出力形式・分割・命名・符号化・完了通知の設定。
-# 各形式で使わない項目も共通契約に保持し、書出し処理側で方式別に使う。
 class FileOptions(Model):
-    formats: list[Literal["json", "csv", "image"]] = Field(
-        # コールバック: モデル生成ごとに新しい形式リストを返し、可変値を別実行と共有しない。
-        default_factory=lambda: ["json", "csv", "image"], min_length=1, max_length=3
+    """ファイルを書き出す形式、分割と完了通知を定義する。"""
+
+    completion_mode: Literal["manifest-v2", "lakehouse-products-local"] = "manifest-v2"
+    formats: list[
+        Literal["json", "csv", "image", "xlsx", "xml", "parquet", "avro", "pdf"]
+    ] = Field(
+        default_factory=lambda: ["json", "csv", "image"], min_length=1, max_length=8
     )
     records_per_file: int = Field(default=100, ge=1, le=10000)
     path_template: str = Field(default="{run_key}/{job_id}", max_length=512)
@@ -406,12 +465,27 @@ class FileOptions(Model):
     csv_encoding: Literal["utf-8", "utf-8-sig"] = "utf-8-sig"
     write_sidecars: bool = True
     write_manifest: bool = True
+    xlsx_sheet: str = Field(
+        default="Data", min_length=1, max_length=31, pattern=r"^[^\[\]:*?/\\]+$"
+    )
+    xlsx_allow_formulas: bool = False
+    xml_root: str = Field(default="records", pattern=IDENTIFIER)
+    xml_row: str = Field(default="record", pattern=IDENTIFIER)
+    parquet_compression: Literal["snappy", "gzip", "zstd", "none"] = "snappy"
+    avro_record_name: str = Field(default="SourceRecord", pattern=IDENTIFIER)
+    avro_namespace: str = Field(
+        default="factory.source", pattern=r"^[A-Za-z_][A-Za-z0-9_.]*$"
+    )
+    avro_codec: Literal["null", "deflate"] = "deflate"
+    pdf_landscape: bool = True
+    pdf_font_size: int = Field(default=8, ge=5, le=14)
+    pdf_columns: list[str] = Field(default_factory=list, max_length=100)
     image: ImageOptions = Field(default_factory=ImageOptions)
 
 
-# 読解 StreamOptions: 本文テンプレート・メタ情報・配送先テンプレートと再試行上書き条件を保持する。
-# 任意の接続先URLを生成行から変更する設定ではない。
 class StreamOptions(Model):
+    """配信する本文の構造・トピック・再試行を指定する。"""
+
     envelope: bool = True
     metadata_key: str = Field(default="_source", pattern=IDENTIFIER)
     http_body: Literal["array", "single", "ndjson"] = "array"
@@ -423,8 +497,6 @@ class StreamOptions(Model):
     retry_backoff_ms: int | None = Field(default=None, ge=0, le=60000)
 
 
-# 読解 default_fields: 新しいRunSpec用に標準の識別子・通番・値・状態・日時の項目を返す。
-# 呼出しごとに新しいFieldRule群を作り、実行間で可変モデルを共有しない。
 def default_fields():
     return [
         FieldRule(name="id", generator="record_id", primary_key=True, length=64),
@@ -460,17 +532,18 @@ def default_fields():
     ]
 
 
-# 読解 Predicate: 異常適用の条件となる項目・比較方法・値を保持する。比較対象は生成済みの行である。
 class Predicate(Model):
+    """生成済みの値が異常の適用条件に一致するかを定義する。"""
+
     field: str = Field(pattern=IDENTIFIER)
     operator: Literal["eq", "ne", "gt", "ge", "lt", "le", "in"] = "eq"
     value: Any = None
 
 
 # 通常の型検査を迂回する異常値は、bypass_validationの明示指定に限る。
-# 読解 AnomalyRule: 適用位置・間隔・確率・条件と値の変形方法を宣言する。
-# 検証迂回を明示した場合だけ、通常の型制約に反する試験データを許す。
-class AnomalyRule(Model):
+class AnomalyRule(TemplateAnnotations):
+    """通常値へ、指定した範囲・頻度・条件で異常を適用する。"""
+
     name: str = Field(default="異常注入", min_length=1, max_length=120)
     enabled: bool = True
     field: str = Field(pattern=IDENTIFIER)
@@ -497,14 +570,14 @@ class AnomalyRule(Model):
     def valid_range(self):
         """異常適用の終了位置が開始位置より前になる指定を拒否する。"""
         if self.to_row is not None and self.to_row < self.from_row:
-            raise ValueError("異常終了位置は開始位置以上にしてください")
+            raise ConfigurationError("異常終了位置は開始位置以上にしてください")
         return self
 
 
 # データの異常値とは別に、処理段階での停止・遅延や成果物破損を試験する設定。
-# 読解 FaultOptions: 処理段階での停止・遅延と成果物破損を指定する。
-# 件数・頻度・上限で制限し、実行時のenabled判定なしには適用しない。
 class FaultOptions(Model):
+    """処理や配送の障害を実行中に再現する。"""
+
     enabled: bool = False
     stage: Literal["before_batch", "after_write"] = "before_batch"
     action: Literal["none", "fail", "delay"] = "none"
@@ -524,9 +597,9 @@ class FaultOptions(Model):
 
 
 # 生成と再送に共通のv2入力契約。接続リビジョンを指定すれば保存済み履歴を参照する。
-# 読解 RunSpec: 生成または再送の一実行を表すv2契約。件数・負荷・出力容量と各出力方式の設定を持つ。
-# 接続情報そのものではなくIDと任意リビジョンを参照し、モデル検証は外部I/Oを行わない。
-class RunSpec(Model):
+class RunSpec(TemplateAnnotations):
+    """生成件数、乱数、項目定義と出力先への参照を保持する。"""
+
     version: Literal[2] = 2
     name: str = Field(default="カスタムデータ", min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
@@ -545,7 +618,6 @@ class RunSpec(Model):
     burst_rows: int = Field(default=0, ge=0, le=1000000)
     burst_pause_ms: int = Field(default=0, ge=0, le=3600000)
     parameters: dict[str, Any] = Field(
-        # コールバック: モデル生成ごとに新しい既定パラメーター辞書を返し、可変値を別実行と共有しない。
         default_factory=lambda: {
             "entity_count": 10,
             "statuses": ["ok", "warning", "stopped"],
@@ -572,15 +644,11 @@ class RunSpec(Model):
 
     @model_validator(mode="after")
     def valid_dataset(self):
-        """項目名・メタ情報名の衝突と非有限パラメーターを拒否する。"""
+        """重複する項目名と非有限パラメーターを拒否する。"""
         names = [f.name.casefold() for f in self.fields]
         if len(set(names)) != len(names):
-            raise ValueError("項目名は重複できません")
-        if self.stream.envelope and self.stream.metadata_key in {
-            f.name for f in self.fields
-        }:
-            raise ValueError("ストリームのメタデータ名と生成項目名が重複しています")
+            raise ConfigurationError("項目名は重複できません")
         for value in self.parameters.values():
             if isinstance(value, float) and not math.isfinite(value):
-                raise ValueError("パラメーターには有限の数を指定してください")
+                raise ConfigurationError("パラメーターには有限の数を指定してください")
         return self

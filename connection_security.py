@@ -1,4 +1,3 @@
-# モジュール読解: 接続用の証明書・鍵・設定ファイルの参照範囲とTLS構築を共通化する。
 """Bounded certificate/key/config paths and shared TLS construction."""
 
 import os
@@ -7,14 +6,14 @@ from pathlib import Path
 from generation import GenerationError
 
 
-# 読解 secret: 指定属性の秘密値を接続用に取り出す。未設定時は空文字とし、結果は表示用途に使わない。
 def secret(p, name):
+    """接続に使う秘密値を取り出す。未設定なら空文字を返す。"""
     value = getattr(p, name)
     return value.get_secret_value() if value else ""
 
 
-# 読解 connection_file: 相対指定を接続ファイル領域の下で解決し、実体が領域外または指定のファイル種別と異なると拒否する。
 def connection_file(value, *, directory=False):
+    """接続専用領域の下でパスを解決する。領域外の実体や異なるファイル種別を拒否する。"""
     root = Path(
         os.environ.get(
             "CONNECTION_FILES_DIR",
@@ -32,8 +31,8 @@ def connection_file(value, *, directory=False):
     return str(path)
 
 
-# 読解 tls_context: 既定のTLS設定に必要なら専用CAとクライアント証明書を読み込む。検証モード以外の挙動を区別し、証明書だけで鍵がない設定は拒否する。
 def tls_context(p):
+    """専用CAとクライアント証明書を適用する。クライアント証明書には鍵が必要。"""
     context = ssl.create_default_context(
         cafile=connection_file(p.tls_ca_file) if p.tls_ca_file else None
     )

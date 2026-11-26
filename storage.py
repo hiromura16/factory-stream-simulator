@@ -1,4 +1,3 @@
-# モジュール読解: 接続設定は暗号化して版を保持し、プリセットはJSONとしてSQLiteへ保存する。
 # 公開用表現と内部の秘密値を分け、接続先を変えた際の秘密値継承を制限する。
 """Persistent encrypted connection profiles and credential-free JSON presets."""
 
@@ -105,6 +104,14 @@ class ConfigStore:
             raise KeyError(identity)
         data = json.loads(self.fernet.decrypt(row["encrypted"]))
         return ConnectionProfile.model_validate(data), row["revision"]
+
+    def profile_versions_of_kind(self, kind):
+        """接続方式が一致する保存済みの版を返す。変更前の宛先も識別できる。"""
+        with self.connect() as conn:
+            for row in conn.execute("SELECT encrypted FROM profile_versions"):
+                data = json.loads(self.fernet.decrypt(row["encrypted"]))
+                if data.get("kind") == kind:
+                    yield ConnectionProfile.model_validate(data)
 
     @staticmethod
     def public(profile, revision=None):

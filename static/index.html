@@ -1,15 +1,19 @@
 <!doctype html>
 <html lang="ja">
-  <!-- 読解: 文字コード・表示幅・共通CSSと遅延実行JSを宣言する。本文の設定値や認証情報はここへ埋め込まない。 --><head>
+  <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Factory Stream Simulator</title>
     <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/help.css" />
     <script src="/static/comparison.js" defer></script>
+    <script src="/static/api-client.js" defer></script>
     <script src="/static/app.js" defer></script>
+    <link rel="stylesheet" href="/static/capture-history.css" />
+    <script src="/static/capture-history.js" defer></script>
   </head>
   <body>
-    <!-- 読解: ツール名と接続表示の領域。health表示はブラウザーが取得した状態で更新する。 --><header>
+    <header>
       <div>
         <h1 id="title">イベント送信シミュレーター</h1>
         <p id="subtitle">設備・センサー・工程イベントを生成し、MQTTブローカーへ送信するシミュレーターです。Kafka、NATS、IoT基盤、ストリーム処理、リアルタイム分析の検証にも利用できます。</p>
@@ -17,7 +21,7 @@
       <span id="health" class="badge">接続中</span>
     </header>
     <div class="layout">
-      <!-- 読解: data-tabと画面IDの対応で切り替えるナビと説明欄。実処理の開始とは分離する。 --><aside>
+      <aside>
         <nav aria-label="メインメニュー">
           <button class="nav active" data-tab="generate">
             <span>イベントを送る</span></button
@@ -30,6 +34,7 @@
           </button>
           <button class="nav" type="button" data-tab="comparison">見本を比較</button>
         </nav>
+        <a class="help-entry" href="/help/">ヘルプ・設定・API</a>
         <div class="aside-note">
           <strong>入力項目の説明</strong>
           <p>
@@ -37,11 +42,12 @@
             にキーボードで移動しても読めます。
           </p>
           <p id="contextHelp">設定値はプレビューで確認してから実行できます。</p>
+          <a class="help-entry" href="/help/glossary.html">用語集</a>
         </div>
       </aside>
       <main>
-        <!-- 読解: 非同期操作の成功・失敗通知を支援技術にも伝える。初期状態では空にしておく。 --><div id="notice" role="status" aria-live="polite"></div>
-        <!-- 読解: プリセット読込み・動的生成条件・プレビュー・実行受付をまとめる。プレビューと投入を別ボタンにする。 --><section id="generate" class="tab active">
+        <div id="notice" role="status" aria-live="polite"></div>
+        <section id="generate" class="tab active">
           <div class="section-head">
             <div>
               <h2>イベントを送る</h2>
@@ -74,13 +80,13 @@
             <p id="presetDetails" class="note"></p>
           </details>
           </details>
-          <!-- 読解: スキーマからJavaScriptが生成欄を構築する空の受け皿。既定のブラウザー送信ではなく操作関数で検証する。 --><form id="runForm" novalidate><div id="runEditor"></div></form>
+          <form id="runForm" novalidate><div id="runEditor"></div></form>
           <section class="card preview-step" aria-labelledby="streamPreviewTitle">
             <h3 id="streamPreviewTitle">送信内容を確認</h3>
             <p class="muted">メッセージ本文、トピック、サイズを送信前に確認できます。</p>
             <button id="preview" class="primary" type="button">送信内容の見本を見る</button>
           </section>
-          <!-- 読解: SQLツールだけで表示する表検査・DDL表示・表準備。表示だけの操作とDDL実行を区別する。 --><div id="sqlActions" class="toolbar card" hidden>
+          <div id="sqlActions" class="toolbar card" hidden>
             <button id="inspectTable">接続先の列を確認</button
             ><button id="showDdl">作成DDLを表示</button
             ><button
@@ -90,7 +96,7 @@
               未作成のテーブルを作成
             </button>
           </div>
-          <!-- 読解: 代表サンプルとJSONを表示する領域。ここでの表示成功は全件・下流到達の保証ではない。 --><div id="previewPanel" class="card" hidden>
+          <div id="previewPanel" class="card" hidden>
             <h3>プレビュー <span class="badge">書き込みなし</span></h3>
             <p id="previewNote"></p>
             <div id="previewMessages"></div>
@@ -105,9 +111,9 @@
             <p class="muted">送信先を確認して開始します。ローカル記録を選ぶと外部へ送信せずに試せます。</p>
             <button id="start" type="button">送信を開始</button>
           </section>
-          <!-- 読解: 非同期ジョブの保存済み状態を表示する。受付と完了を区別するため独立した領域にする。 --><div id="currentJob" class="card" hidden></div>
+          <div id="currentJob" class="card" hidden></div>
         </section>
-        <!-- 読解: 保存された接続先の一覧と編集。疎通試験は保存済みIDを使い、秘密値の再表示は行わない。 --><section id="connections" class="tab">
+        <section id="connections" class="tab">
           <div class="section-head">
             <div>
               <span class="eyebrow">DESTINATIONS</span>
@@ -124,7 +130,7 @@
               <h3 id="connectionTitle">接続先の編集</h3>
               <span class="badge">認証情報は暗号化保存</span>
             </div>
-            <!-- 読解: 接続方式別スキーマから編集欄を作る受け皿。認証値はサーバーへ送る入力でありHTMLへ初期埋込みしない。 --><form id="connectionForm" novalidate></form>
+            <form id="connectionForm" novalidate></form>
             <div class="actionbar">
               <button id="saveConnection" class="primary">接続先を保存</button
               ><button id="testConnection">保存済みの接続をテスト</button
@@ -159,9 +165,9 @@
               ><span id="connectionFileResult" class="muted"></span>
             </div>
           </details>
-          <!-- 読解: 選択した方式の注意事項を表示するだけの領域。接続許可や検証成功の代わりにはしない。 --><div class="card note" id="destinationAdvice"></div>
+          <div class="card note" id="destinationAdvice"></div>
         </section>
-        <!-- 読解: 宣言JSONの編集・取込み・保存・書出しを分離する。画面へ適用しただけでは実行しない。 --><section id="presets" class="tab">
+        <section id="presets" class="tab">
           <div class="section-head">
             <div>
               <span class="eyebrow">REUSABLE CONFIGURATION</span>
@@ -212,14 +218,19 @@
             </label>
             <div class="actionbar">
               <button id="applyJson">JSONを画面に適用</button>
+              <label class="checkline">
+                <input type="checkbox" id="compactExport" checked />
+                既定値を省略
+              </label>
               <button id="exportPreset">JSONを書き出す</button>
+              <a class="help-entry" href="/help/templates.html">JSONの書き方</a>
             </div>
             <p class="muted">
               接続先のIDを参照します。パスワードやトークンは接続先画面で設定してください。
             </p>
           </div>
         </section>
-        <!-- 読解: 実行履歴と、stream専用の未配送再送を表示する。履歴の読出しと再送の副作用を別操作にする。 --><section id="history" class="tab">
+        <section id="history" class="tab">
           <div class="section-head">
             <div>
               <span class="eyebrow">RUN HISTORY</span>
@@ -227,7 +238,7 @@
             </div>
             <button id="refreshHistory">更新</button>
           </div>
-          <!-- 読解: streamツールでだけ表示する配送待ちの集計と再送条件。再送件数には上限を設定する。 --><div id="outboxPanel" class="card" hidden>
+          <div id="outboxPanel" class="card" hidden>
             <h3>永続 outbox</h3>
             <pre id="outboxSummary"></pre>
             <div class="toolbar">
@@ -247,6 +258,20 @@
               応答が失われた際は重複し得ます。受信側でrecord_keyによる重複排除を行ってください。
             </p>
           </div>
+          <details id="capturePanel" class="card capture-history">
+            <summary>ローカル記録の本文を見る</summary>
+            <p class="muted">
+              「ローカル記録」へ送ったイベントを表示します。外部の送信先へ流したイベントはここに表示されません。
+            </p>
+            <div class="toolbar">
+              <button id="captureLatest" type="button">最新を取得</button>
+              <button id="capturePrevious" type="button" disabled>新しい記録</button>
+              <button id="captureNext" type="button" disabled>古い記録</button>
+              <a id="captureDownload" hidden download>表示中のページをJSONLで保存</a>
+            </div>
+            <p id="captureStatus" role="status" aria-live="polite">開くと記録を取得します。</p>
+            <ol id="captureList"></ol>
+          </details>
           <div id="historyList"></div>
         </section>
         <section id="comparison" class="tab" aria-labelledby="comparisonTitle">
@@ -303,8 +328,8 @@
         </section>
       </main>
     </div>
-    <!-- 読解: 共通の文脈ヘルプを表示する浮動領域。非表示時は本文の操作を妨げない。 --><div id="tooltip" role="tooltip" hidden></div>
-    <!-- 読解: 接続と生成を利用者が管理する前提を示す固定の案内。実行結果の証明ではない。 --><footer>
+    <div id="tooltip" role="tooltip" hidden></div>
+    <footer>
       設定はアプリの永続ボリュームに保存されます。生成速度は目標値です。
     </footer>
   </body>

@@ -1,0 +1,9 @@
+{
+  "api_support.py": "119eb54d873ca3d7070fa8bbd935a47af76aa4be312aaa3c50421451562f5b43",
+  "generation.py": "fde8fda9a323336724ba6263fd65731038955e73bd9a6952092d1951648b0124",
+  "scripts/build_help.py": "d78695ec26631e12bad6b76088435bf03ee3ae8021b0abbbfd77f97a1c2925cb",
+  "scripts/check_shared.py": "0b875b26a39bd573edbdcaa16b330032207e2f4917b716c482a885d5409b4880",
+  "static/api-client.js": "1dddaa692f2eef8889667affc87013e01924cc3ba8fcc6870449002037bcc2ac",
+  "static/help.css": "69b592658775ab8995d47673e187a4c8f7129f5a51002550fd5a7fa35d655037",
+  "static/help.js": "a1598b93ada9e6e943d87d63b5103dfdb2f4d97f0ee5e268d9483a38ed261135"
+}
