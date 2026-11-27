@@ -268,7 +268,7 @@ def install_preset_editor(app, library, spec_model, validate_spec):
     )
     validation_response = create_model(
         "PresetEditorValidation",
-        spec=(spec_model, Field(description="検証済みの設定。保存や実行は行いません。")),
+        spec=(dict[str, Any], Field(description="検証済みのプリセットJSON。入力の spec と同じ契約です。")),
         compact_spec=(dict[str, Any], Field(description="既定値を省略した設定。バージョンは保持します。")),
     )
 
