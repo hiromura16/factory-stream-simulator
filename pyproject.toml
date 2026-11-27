@@ -4,8 +4,8 @@ version = "0.3.0"
 description = "Independent manufacturing factory data producer"
 requires-python = ">=3.12,<3.15"
 dependencies = [
-    'fastapi==0.121.2',
-    'uvicorn==0.38.0',
+    'fastapi==0.165.0',
+    'uvicorn==0.54.0',
     'paho-mqtt==2.2.0',
     "cryptography>=46,<50",
     "confluent-kafka>=2.12,<3",
