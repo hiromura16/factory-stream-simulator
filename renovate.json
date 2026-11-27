@@ -1,0 +1,75 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "Asia/Tokyo",
+  "enabledManagers": [
+    "pep621",
+    "pip_requirements",
+    "dockerfile",
+    "github-actions",
+    "custom.regex"
+  ],
+  "automerge": false,
+  "dependencyDashboard": {
+    "enabled": false
+  },
+  "prConcurrentLimit": 2,
+  "prHourlyLimit": 1,
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchDepTypes": [
+        "requires-python"
+      ],
+      "enabled": false
+    },
+    {
+      "matchManagers": [
+        "pep621",
+        "pip_requirements"
+      ],
+      "matchDatasources": [
+        "pypi"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Python minor and patch dependencies"
+    },
+    {
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchPackageNames": [
+        "python",
+        "docker.io/library/python"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor"
+      ],
+      "enabled": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/renovate-config\\.yml$/"
+      ],
+      "matchStrings": [
+        "--package=renovate@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "renovate"
+    }
+  ]
+}
