@@ -25,10 +25,28 @@ curl -fsS "$base/api/preview" \
 | 設定スキーマを取得 | GET /api/info、GET /api/schemas | 設定の型や既定値の確認に使います。 |
 | 生成値の確認 | POST /api/preview | データの一部を作り、外部には書き込みません。 |
 | 接続設定を一覧・保存・確認 | GET／POST /api/connections、POST /api/connections/{identity}/test | 疎通確認は接続先へアクセスします。 |
-| ひな型を一覧・保存・取得 | GET /api/presets、POST /api/presets/{identity}、GET /api/presets/{identity}/export | 同じIDに保存すると更新します。 |
+| プリセットの検索・取得・検証・保存・削除 | `/api/preset-editor` | 使い分けは下の「プリセット編集のAPI」を参照してください。 |
 | 実行を受け付ける | POST /api/runs | 202は受付です。応答の id を控え、run_id に指定します。 |
 | 状態を調べる | GET /api/runs/{run_id} | 完了、失敗、停止を履歴で判断します。 |
 | 停止を要求する | POST /api/runs/{run_id}/stop | 確定済みの出力が残る場合があります。 |
+
+## プリセット編集のAPI
+
+設定のみを扱うクライアントには次の操作を使えます。管理認証が有効な環境では、アプリと同じ管理権限が必要です。接続を表す値には接続IDを指定します。
+
+| 目的 | メソッドとパス | リクエストと結果 |
+| --- | --- | --- |
+| 名前、タグ、同梱／保存済みの区分を確認 | `GET /api/preset-editor` | `presets` にメタデータが入ります。 |
+| 編集する設定と版を取得 | `GET /api/preset-editor/{identity}` | `spec` と、編集・削除時に使う `revision` が返ります。 |
+| 設定を検証 | `POST /api/preset-editor/validate` | 本文は `{"spec": {...}, "tags": ["試験"]}` です。検証後の設定は応答の `spec` で受け取ります。 |
+| 見本を確認 | `POST /api/preview` | 検証応答の `spec` オブジェクトをそのまま本文に使います。`writes` が `false` であることを確認します。 |
+| 別名で保存 | `POST /api/preset-editor` | `id`、`spec`、`tags` を送ります。既存の保存済みIDとの重複は409です。 |
+| 上書き保存 | `PUT /api/preset-editor/{identity}` | `spec` と `tags` を送り、取得時の `revision` を引用符で囲んで `If-Match` に付けます。 |
+| 保存済みを削除 | `DELETE /api/preset-editor/{identity}` | 引用符付きの `If-Match` を付けます。リクエスト本文は不要です。 |
+
+`POST` と `PUT` の本文には `Content-Type: application/json` を指定します。更新・削除は `If-Match` がなければ428、版が変わっていれば412です。412では最新の版を取得して差分を確認します。同梱のひな型に対する保存・削除は403です。検証エラーの422では `detail` の項目と説明を確認します。
+
+AIには照会、検証、プレビューを使う方針を伝えます。プリセットの保存・削除は運用者の指示を確認してから行い、外部書き込みや公開は、実行画面または実行APIで条件と承認手順を確認します。[画面での操作](preset-guide.md) · [テンプレート作成ハーネス](AI_TEMPLATE_HARNESS.md)
 
 ## このアプリで取得できる結果
 
