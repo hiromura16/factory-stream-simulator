@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, Response, JSONResponse, PlainTextRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from preset_editor import PresetLibrary, clean_secrets, install_preset_editor, require_safe_preset
 from operation_confirmation import CONFIRMATION_HEADER, install_operation_gate
 from api_support import (
     display_location, history_error, install_error_handlers, install_help,
@@ -453,6 +454,7 @@ def create_app(kind, title, adapter):
         return spec
 
     store.seed_presets(root / "presets", initial_preset)
+    preset_library = PresetLibrary(store.connect, root / "presets", "spec")
 
     # 秘密値は接続オブジェクト内に保持し、処理例外はRuntime側へ伝える。
     def dispatch(spec, ctx):
@@ -500,7 +502,8 @@ def create_app(kind, title, adapter):
                     {"detail": "別サイトからの操作は許可されていません"}, 403
                 )
             if (
-                request.headers.get("content-type", "").split(";", 1)[0]
+                not (request.method == "DELETE" and request.url.path.startswith("/api/preset-editor/"))
+                and request.headers.get("content-type", "").split(";", 1)[0]
                 != "application/json"
             ):
                 return JSONResponse({"detail": "application/jsonが必要です"}, 415)
@@ -767,7 +770,7 @@ def create_app(kind, title, adapter):
     )
     def presets():
         """同梱・保存済みのひな型と内容を返します。読み取りで生成や実行は始まりません。"""
-        return {"presets": store.presets()}
+        return {"presets": [dict(item, spec=clean_secrets(item["spec"])) for item in store.presets()]}
 
     # 生成条件の検証は接続先に書き込む試験を意味しない。
     @app.post(
@@ -781,6 +784,8 @@ def create_app(kind, title, adapter):
             raise HTTPException(
                 422, "プリセットIDは英数字・ハイフン・下線で指定してください"
             )
+        preset_library.require_writable(identity)
+        require_safe_preset(spec.model_dump(mode="json"))
         return store.save_preset(identity, checked(spec))
 
     @app.get(
@@ -792,7 +797,7 @@ def create_app(kind, title, adapter):
     def export_preset(identity: str):
         """保存されたIDの設定JSONを返します。未登録のIDは404です。"""
         try:
-            return store.get_preset(identity)["spec"]
+            return clean_secrets(store.get_preset(identity)["spec"])
         except KeyError:
             raise HTTPException(404, "プリセットが見つかりません") from None
 
@@ -1103,4 +1108,5 @@ def create_app(kind, title, adapter):
             )
             return runtime.start(spec)
 
+    install_preset_editor(app, preset_library, RunSpec, checked)
     return app

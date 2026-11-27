@@ -227,11 +227,11 @@ class ConfigStore:
     def presets(self):
         """更新日時とIDの順に、保存済みプリセットを返す。"""
         with self.connect() as conn:
-            identities = [
-                row[0]
-                for row in conn.execute("SELECT id FROM presets ORDER BY updated_at,id")
+            return [
+                {"id": row["id"], "name": value.name, "spec": value.model_dump(mode="json")}
+                for row in conn.execute("SELECT id,spec FROM presets ORDER BY updated_at,id")
+                for value in [RunSpec.model_validate_json(row["spec"])]
             ]
-        return [self.get_preset(identity) for identity in identities]
 
     def seed_presets(self, directory, transform=None):
         """未登録IDだけを同梱JSONから補う。既存の利用者設定は上書きしない。"""

@@ -372,7 +372,9 @@ def install_help(app, root, studio, kind, credentials):
                             "操作や前提の不一致（confirmation_mismatch）を区別できます。"
                         ),
                     }
-                if method != "get":
+                if method == "delete" and path == "/api/preset-editor/{identity}":
+                    operation["responses"].setdefault("403", {"description": "操作元または権限が許可されていません"})
+                elif method != "get":
                     if "requestBody" not in operation:
                         operation["requestBody"] = {
                             "required": True,
