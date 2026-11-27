@@ -1,15 +1,19 @@
 {
-  "api_support.py": "2bc750a01b0fa27e03fcffc156ea64cb40cb523458e0dc6954047680d3769e52",
+  "api_support.py": "bd87312876188f6a2daf82cfe02afecdea11b2af17d7c58340873c655d5b962c",
   "cli.py": "c0959d96524d70c162ce7846472d99d4070abed917f45c6652670f3d338a6e55",
   "docs/mcp.md": "d06265a3d106228d3c50a8670c52b79814703d71de0f32287d2b7f238d19b328",
   "generation.py": "1ddaba70fa5855d8906d3131e6a4b7aeee3fb83fee01d2b05faf1b8874163a8f",
   "mcp_server.py": "8078c2ac1a8d1e09eddbdba20d043aafe7f4c83894772bd3a2c73c28267b30c5",
   "operation_confirmation.py": "31b5794e83f857fa23f94c58a0d934f0f6f6c4242d073f931b8ab639388a49ba",
+  "preset_editor.py": "d50fa7906e2fa65d16e8cd7f79f5a82bb7732a2d8e82408154aba6c29e13c2bc",
   "scripts/build_help.py": "5be3ceb78d678ff2d037777497d17ae411f805a0ca59e00130e94b5b8ea68a57",
   "scripts/check_shared.py": "fe82f436b5ee90da4cd0f795101c4d226ddc7765ab2702ab7f1a30f17a1768b4",
   "scripts/preset_catalog.py": "f1a4ee4d223f224b430677d484eaf7be437a1b7d91e5d377b4c3b9930504482d",
   "static/api-client.js": "e99aced24bc89ff134d1042e470a087108c3374f1d77dda47ab8cf70293eccee",
   "static/help.css": "69b592658775ab8995d47673e187a4c8f7129f5a51002550fd5a7fa35d655037",
   "static/help.js": "a1598b93ada9e6e943d87d63b5103dfdb2f4d97f0ee5e268d9483a38ed261135",
-  "tests/test_agent_clients.py": "af5ed954a9e26822d29daece77c77e62b3c9cae970df26d359d6914f286bddac"
+  "static/preset-editor.css": "da2829696a051efdf336432623b6cd798451335428db79a16cfe3eb4fd2d4df9",
+  "static/preset-editor.js": "3a658cc223d5dc622740569fa759d9f5a0b7a24047535163b6f4786b7ca2d603",
+  "tests/test_agent_clients.py": "af5ed954a9e26822d29daece77c77e62b3c9cae970df26d359d6914f286bddac",
+  "tests/test_preset_editor.py": "81836e15a81d5a71e21f22d15f82c613bedc1a016c4eef0d5db8b7b2e3f0a1ed"
 }

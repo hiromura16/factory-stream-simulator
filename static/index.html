@@ -3,11 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Factory Stream Simulator</title>
+    <title>イベント送信シミュレーター</title>
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="stylesheet" href="/static/help.css" />
     <script src="/static/comparison.js" defer></script>
     <script src="/static/api-client.js" defer></script>
+    <link rel="stylesheet" href="/static/preset-editor.css" />
+    <script src="/static/preset-editor-config.js" defer></script>
+    <script src="/static/preset-editor.js" defer></script>
     <script src="/static/app.js" defer></script>
     <link rel="stylesheet" href="/static/capture-history.css" />
     <script src="/static/capture-history.js" defer></script>
@@ -28,7 +31,7 @@
           ><button class="nav" data-tab="connections">
             <span>接続先</span></button
           ><button class="nav" data-tab="presets">
-            <span>プリセット / JSON</span></button
+            <span>プリセットを編集</span></button
           ><button class="nav" data-tab="history">
             <span>実行履歴</span>
           </button>
@@ -69,7 +72,8 @@
               data-help="保存済みプリセットを読み込みます。画面の編集中の設定は置き換わります。"
               >ひな型（プリセット）<select id="presetSelect"></select></label
             ><button id="loadPreset">ひな型を読み込む</button
-            ><button id="resetRun" class="ghost">初期値</button
+            >
+              <button id="editSelectedPreset" type="button">プリセットを編集</button><button id="resetRun" class="ghost">初期値</button
             ><button id="toPreset" class="ghost">この設定を保存…</button>
           </div>
             <div class="preset-scenario">
@@ -169,67 +173,8 @@
           <div class="card note" id="destinationAdvice"></div>
         </section>
         <section id="presets" class="tab">
-          <div class="section-head">
-            <div>
-              <span class="eyebrow">REUSABLE CONFIGURATION</span>
-              <h2>プリセットをつくる</h2>
-            </div>
-            <button id="refreshJson" class="ghost">
-              画面の設定をJSONに反映
-            </button>
-          </div>
-          <div class="card">
-            <section id="presetMetadata" aria-label="ひな型を保存">
-              <h3>ひな型を保存</h3>
-              <p class="muted">新しく保存するときは、既存のひな型と異なるIDを使います。</p>
-              <div class="preset-metadata-fields">
-                <div class="control"><label for="presetId">プリセットID</label>
-                  <input id="presetId" maxlength="64" placeholder="my-preset" />
-                </div>
-                <div class="control"><label for="presetDisplayName">ひな型の表示名（任意）</label>
-                  <input id="presetDisplayName" maxlength="120" placeholder="今の名前を使う場合は空欄" />
-                </div>
-              </div>
-              <label for="presetPurpose">想定する状況（任意）</label>
-              <textarea id="presetPurpose" maxlength="1000" rows="2" placeholder="何を試すのか、結果のどこを見るのか"></textarea>
-              <button id="savePreset" class="primary" type="button">ひな型として保存</button>
-            </section>
-            <div class="grid">
-              <label
-                class="hint"
-                data-help="このJSONを別のアプリへ移す場合は、接続IDに対応する接続プロファイルを移動先でも設定してください。認証情報は含まれません。"
-                >JSONファイルから読み込む
-                <span class="help" tabindex="0">?</span
-                ><input
-                  id="importPreset"
-                  type="file"
-                  accept="application/json,.json"
-              /></label>
-            </div>
-            <label
-              class="hint"
-              data-help="実行条件・任意パラメーター・データ項目・出力条件を丸ごと編集できます。「JSONを画面に適用」で検証してフォームへ反映します。保存前にこの内容を検証します。"
-              >プリセットJSON <span class="help" tabindex="0">?</span
-              ><textarea
-                id="presetJson"
-                class="code"
-                spellcheck="false"
-                rows="24"
-              ></textarea>
-            </label>
-            <div class="actionbar">
-              <button id="applyJson">JSONを画面に適用</button>
-              <label class="checkline">
-                <input type="checkbox" id="compactExport" checked />
-                既定値を省略
-              </label>
-              <button id="exportPreset">JSONを書き出す</button>
-              <a class="help-entry" href="/help/templates.html">JSONの書き方</a>
-            </div>
-            <p class="muted">
-              接続先のIDを参照します。パスワードやトークンは接続先画面で設定してください。
-            </p>
-          </div>
+          <h2>プリセットを編集</h2>
+          <div id="presetEditor"></div>
         </section>
         <section id="history" class="tab">
           <div class="section-head">
