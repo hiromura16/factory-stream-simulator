@@ -18,7 +18,7 @@
   "prConcurrentLimit": 2,
   "prHourlyLimit": 1,
   "lockFileMaintenance": {
-    "enabled": true
+    "enabled": false
   },
   "packageRules": [
     {
@@ -57,6 +57,47 @@
         "minor"
       ],
       "enabled": false
+    },
+    {
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchDatasources": [
+        "pypi"
+      ],
+      "matchDepTypes": [
+        "dependency-groups"
+      ],
+      "matchPackageNames": [
+        "pytest"
+      ],
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "matchCurrentVersion": "!/^0\\./",
+      "groupName": "Pytest patch updates",
+      "automerge": true,
+      "rebaseWhen": "behind-base-branch",
+      "prPriority": 5
+    },
+    {
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "python",
+        "docker.io/library/python"
+      ],
+      "matchCurrentValue": "3.12-slim",
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "automerge": true,
+      "rebaseWhen": "behind-base-branch",
+      "prPriority": 5
     }
   ],
   "customManagers": [
@@ -71,5 +112,17 @@
       "datasourceTemplate": "npm",
       "depNameTemplate": "renovate"
     }
-  ]
+  ],
+  "minimumReleaseAge": "3 days",
+  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "internalChecksFilter": "strict",
+  "internalChecksAsSuccess": false,
+  "platformAutomerge": false,
+  "automergeType": "pr",
+  "ignoreTests": false,
+  "vulnerabilityAlerts": {
+    "automerge": false,
+    "minimumReleaseAge": "3 days",
+    "minimumReleaseAgeBehaviour": "timestamp-required"
+  }
 }
