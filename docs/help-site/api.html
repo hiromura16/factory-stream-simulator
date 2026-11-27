@@ -17,7 +17,7 @@
   <div class="help-layout">
     <nav class="help-nav" aria-label="ヘルプ"><a href="/help/index.html">初めて使う</a><a href="/help/presets.html">ひな型を選ぶ・作る</a><a href="/help/templates.html">JSONの書き方</a><a href="/help/settings.html">設定リファレンス</a><a href="/help/api.html" aria-current="page">APIの使い方</a><a href="/help/glossary.html">用語集</a><a href="/help/ai.html">AIにひな型を頼む</a><a href="/help/mcp.html">CLI・MCP</a><a href="/help/install.html">VMへの導入</a><a href="/help/catalog.html">付属のひな型一覧</a></nav>
     <main class="help-content" id="help-content">
-      <nav class="help-outline" aria-label="このページ"><a href="#最初のリクエスト">最初のリクエスト</a><a href="#操作を選ぶ">操作を選ぶ</a><a href="#このアプリで取得できる結果">このアプリで取得できる結果</a><a href="#認証とpost">認証とPOST</a><a href="#実行前に接続先と操作を確認する">実行前に接続先と操作を確認する</a><a href="#エラ-の見方">エラーの見方</a></nav>
+      <nav class="help-outline" aria-label="このページ"><a href="#最初のリクエスト">最初のリクエスト</a><a href="#操作を選ぶ">操作を選ぶ</a><a href="#プリセット編集のapi">プリセット編集のAPI</a><a href="#このアプリで取得できる結果">このアプリで取得できる結果</a><a href="#認証とpost">認証とPOST</a><a href="#実行前に接続先と操作を確認する">実行前に接続先と操作を確認する</a><a href="#エラ-の見方">エラーの見方</a></nav>
       <article><h1>ストリーム送信のAPI</h1>
 <p><a href="/docs">Swagger UI</a>で操作ごとのリクエストと応答を確認できます。<a href="/openapi.json">OpenAPI JSON</a>はAPIクライアントへの読み込み、<a href="/redoc">ReDoc</a>はモデル参照に使えます。</p>
 <h2 id="最初のリクエスト">最初のリクエスト</h2>
@@ -61,9 +61,9 @@ curl -fsS &quot;$base/api/preview&quot; \
 <td>疎通確認は接続先へアクセスします。</td>
 </tr>
 <tr>
-<td>ひな型を一覧・保存・取得</td>
-<td>GET /api/presets、POST /api/presets/{identity}、GET /api/presets/{identity}/export</td>
-<td>同じIDに保存すると更新します。</td>
+<td>プリセットの検索・取得・検証・保存・削除</td>
+<td><code>/api/preset-editor</code></td>
+<td>使い分けは下の「プリセット編集のAPI」を参照してください。</td>
 </tr>
 <tr>
 <td>実行を受け付ける</td>
@@ -82,6 +82,56 @@ curl -fsS &quot;$base/api/preview&quot; \
 </tr>
 </tbody>
 </table>
+<h2 id="プリセット編集のapi">プリセット編集のAPI</h2>
+<p>設定のみを扱うクライアントには次の操作を使えます。管理認証が有効な環境では、アプリと同じ管理権限が必要です。接続を表す値には接続IDを指定します。</p>
+<table>
+<thead>
+<tr>
+<th>目的</th>
+<th>メソッドとパス</th>
+<th>リクエストと結果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>名前、タグ、同梱／保存済みの区分を確認</td>
+<td><code>GET /api/preset-editor</code></td>
+<td><code>presets</code> にメタデータが入ります。</td>
+</tr>
+<tr>
+<td>編集する設定と版を取得</td>
+<td><code>GET /api/preset-editor/{identity}</code></td>
+<td><code>spec</code> と、編集・削除時に使う <code>revision</code> が返ります。</td>
+</tr>
+<tr>
+<td>設定を検証</td>
+<td><code>POST /api/preset-editor/validate</code></td>
+<td>本文は <code>{&quot;spec&quot;: {...}, &quot;tags&quot;: [&quot;試験&quot;]}</code> です。検証後の設定は応答の <code>spec</code> で受け取ります。</td>
+</tr>
+<tr>
+<td>見本を確認</td>
+<td><code>POST /api/preview</code></td>
+<td>検証応答の <code>spec</code> オブジェクトをそのまま本文に使います。<code>writes</code> が <code>false</code> であることを確認します。</td>
+</tr>
+<tr>
+<td>別名で保存</td>
+<td><code>POST /api/preset-editor</code></td>
+<td><code>id</code>、<code>spec</code>、<code>tags</code> を送ります。既存の保存済みIDとの重複は409です。</td>
+</tr>
+<tr>
+<td>上書き保存</td>
+<td><code>PUT /api/preset-editor/{identity}</code></td>
+<td><code>spec</code> と <code>tags</code> を送り、取得時の <code>revision</code> を引用符で囲んで <code>If-Match</code> に付けます。</td>
+</tr>
+<tr>
+<td>保存済みを削除</td>
+<td><code>DELETE /api/preset-editor/{identity}</code></td>
+<td>引用符付きの <code>If-Match</code> を付けます。リクエスト本文は不要です。</td>
+</tr>
+</tbody>
+</table>
+<p><code>POST</code> と <code>PUT</code> の本文には <code>Content-Type: application/json</code> を指定します。更新・削除は <code>If-Match</code> がなければ428、版が変わっていれば412です。412では最新の版を取得して差分を確認します。同梱のひな型に対する保存・削除は403です。検証エラーの422では <code>detail</code> の項目と説明を確認します。</p>
+<p>AIには照会、検証、プレビューを使う方針を伝えます。プリセットの保存・削除は運用者の指示を確認してから行い、外部書き込みや公開は、実行画面または実行APIで条件と承認手順を確認します。<a href="/help/presets.html">画面での操作</a> · <a href="/help/ai.html">テンプレート作成ハーネス</a></p>
 <h2 id="このアプリで取得できる結果">このアプリで取得できる結果</h2>
 <p><code>GET /api/outbox</code> で配送状態を読み、<code>POST /api/outbox/retry</code> で再送ジョブを作ります。<code>X-Expected-Connection-Revision</code> は開始時に接続先が変更されていないことを照合するためのヘッダーです。HTTP・MQTTなどへの実際の配送と後段処理を区別します。ローカル記録は <code>GET /api/outbox/capture</code> で新しい順にページを取得し、詳細APIで本文、<code>GET /api/outbox/capture/download</code> で1ページ分のJSON Linesを取得できます。</p>
 <h2 id="認証とpost">認証とPOST</h2>
