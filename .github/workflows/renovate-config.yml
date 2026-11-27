@@ -1,0 +1,28 @@
+name: Validate Renovate
+
+on:
+  pull_request:
+    paths:
+      - renovate.json
+      - .github/workflows/renovate-config.yml
+  push:
+    paths:
+      - renovate.json
+      - .github/workflows/renovate-config.yml
+
+permissions:
+  contents: read
+
+jobs:
+  renovate-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.3'
+          package-manager-cache: false
+      - name: Validate repository configuration
+        run: npx --yes --package=renovate@45.1.1 -- renovate-config-validator --strict
